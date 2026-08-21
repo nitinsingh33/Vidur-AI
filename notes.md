@@ -1,0 +1,1 @@
+**Pitch:** We built a revenue recovery orchestration agent that reasons across heterogeneous revenue-loss signals, predicts recovery probability, selects the optimal bounded intervention, executes it through payment and communication tools, and continuously measures recovered revenue.
