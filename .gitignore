@@ -71,3 +71,7 @@ env/
 tmp/
 temp/
 scratch/
+
+# Prisma Generated Client
+src/generated/
+generated/
