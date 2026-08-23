@@ -1,4 +1,4 @@
-# RecoverAI — Agentic Revenue Recovery Orchestrator
+# VidurAI — Agentic Revenue Recovery Orchestrator
 
 > An AI-powered revenue recovery agent that detects revenue at risk, diagnoses the root cause, selects the right intervention, executes bounded recovery workflows, and measures the money actually recovered.
 
