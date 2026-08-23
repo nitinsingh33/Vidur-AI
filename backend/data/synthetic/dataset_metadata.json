@@ -1,0 +1,19 @@
+{
+  "datasetName": "RecoverAI Synthetic Revenue Recovery Dataset",
+  "datasetType": "SYNTHETIC",
+  "synthetic": true,
+  "generatorVersion": "phase-2-v1",
+  "scale": "full",
+  "randomSeed": 42,
+  "generatedAt": "2026-08-23T05:11:23.490965+00:00",
+  "counts": {
+    "merchants": 100,
+    "customers": 10000,
+    "orders": 50000,
+    "payments": 70000,
+    "subscriptions": 10000,
+    "invoices": 20000,
+    "paymentEvents": 190050,
+    "scenarios": 50
+  }
+}

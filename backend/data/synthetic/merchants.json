@@ -1,0 +1,702 @@
+[
+  {
+    "id": "313d3c04-1e0d-4192-954c-a631482d2689",
+    "name": "Merchant 0001",
+    "email": "merchant0001@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "c2eb26fd-6062-4774-916a-96ccd8e7b0a0",
+    "name": "Merchant 0002",
+    "email": "merchant0002@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "14203fc3-efe7-4aa1-8d62-e87cffa94f56",
+    "name": "Merchant 0003",
+    "email": "merchant0003@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "131267e4-4f11-4a8f-89b6-bae5a2587c35",
+    "name": "Merchant 0004",
+    "email": "merchant0004@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "e1ff3a9e-6535-44c9-a618-2ca4199a8a0d",
+    "name": "Merchant 0005",
+    "email": "merchant0005@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "56a3cd7f-2f2f-4c3a-9a9c-ee66150f3712",
+    "name": "Merchant 0006",
+    "email": "merchant0006@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "edf59fac-3385-4d84-aeec-249daa01d4f7",
+    "name": "Merchant 0007",
+    "email": "merchant0007@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "324c4ddd-f62d-4aed-afaf-08e8c4773cb8",
+    "name": "Merchant 0008",
+    "email": "merchant0008@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "678fae2e-1af5-450e-b125-0d67bb45fa7c",
+    "name": "Merchant 0009",
+    "email": "merchant0009@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "c7a828e0-46fc-4954-85b9-a9e0dcd10402",
+    "name": "Merchant 0010",
+    "email": "merchant0010@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "22b22e83-b948-41a3-ab58-4eb0babc60d4",
+    "name": "Merchant 0011",
+    "email": "merchant0011@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "dae5f52b-2efe-4ae2-a07f-f2ec96e7e241",
+    "name": "Merchant 0012",
+    "email": "merchant0012@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "adc7f8ba-6f18-49fb-9b84-9111455b42dd",
+    "name": "Merchant 0013",
+    "email": "merchant0013@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "f136a1f4-f390-468f-9179-7be7366bb7b2",
+    "name": "Merchant 0014",
+    "email": "merchant0014@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "e975ce3a-15f1-44a3-a080-f53c83cf004b",
+    "name": "Merchant 0015",
+    "email": "merchant0015@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "12ddb423-b82f-49ba-914d-8f0211340347",
+    "name": "Merchant 0016",
+    "email": "merchant0016@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "58035834-e779-419a-bf1b-e5ca8a0fb5b9",
+    "name": "Merchant 0017",
+    "email": "merchant0017@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "92cb4726-d6a3-4a8c-af55-3b9a7a4d516a",
+    "name": "Merchant 0018",
+    "email": "merchant0018@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "e56d0898-5110-499b-a976-e5f59cc2bb8b",
+    "name": "Merchant 0019",
+    "email": "merchant0019@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "0712feb3-9094-4cd4-9136-4d10a58f4b74",
+    "name": "Merchant 0020",
+    "email": "merchant0020@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "82ad69f7-10f3-4ef6-b846-bca5c03011a2",
+    "name": "Merchant 0021",
+    "email": "merchant0021@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "9cd76cac-6724-47e0-9c13-5cb9f6bdb555",
+    "name": "Merchant 0022",
+    "email": "merchant0022@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "35016c32-a828-4b87-879a-ca15491f2c41",
+    "name": "Merchant 0023",
+    "email": "merchant0023@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "300f0e99-83de-4102-9223-9055c5295f78",
+    "name": "Merchant 0024",
+    "email": "merchant0024@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "1ebbb77d-84a6-4b4c-9977-32fa7a33b564",
+    "name": "Merchant 0025",
+    "email": "merchant0025@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "313d85de-cf00-4353-abc6-82847d4b2666",
+    "name": "Merchant 0026",
+    "email": "merchant0026@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "3f0b5d7a-2ae5-4872-a33f-77e64b79403e",
+    "name": "Merchant 0027",
+    "email": "merchant0027@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "01181fe1-07f1-4fd6-86d3-89c2ae032c42",
+    "name": "Merchant 0028",
+    "email": "merchant0028@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "979b49ae-ce61-429a-9230-996bb43bb1cc",
+    "name": "Merchant 0029",
+    "email": "merchant0029@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "3434f11b-8e43-45a2-9488-c36d0dccacba",
+    "name": "Merchant 0030",
+    "email": "merchant0030@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "4f0dfd2e-156a-4eb1-91de-dd90c8624663",
+    "name": "Merchant 0031",
+    "email": "merchant0031@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "82b7025b-40df-45cd-8664-b66c3fafa102",
+    "name": "Merchant 0032",
+    "email": "merchant0032@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "2f34fd74-9613-4d86-ac65-92735c4c6f06",
+    "name": "Merchant 0033",
+    "email": "merchant0033@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "77a06787-10ec-4c89-9e4c-b4c6557071a3",
+    "name": "Merchant 0034",
+    "email": "merchant0034@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "cfbfaeb6-6c95-4fe1-8baf-ba7a2366e150",
+    "name": "Merchant 0035",
+    "email": "merchant0035@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "4223938a-c3e6-419e-9170-dac13bdfb841",
+    "name": "Merchant 0036",
+    "email": "merchant0036@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "4426bf8a-83aa-46ab-9d88-2d721718e474",
+    "name": "Merchant 0037",
+    "email": "merchant0037@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "86bc6e97-a1db-4ec3-9663-e1795d46b9e4",
+    "name": "Merchant 0038",
+    "email": "merchant0038@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "efebca28-956e-42af-923a-d65fc98ab7db",
+    "name": "Merchant 0039",
+    "email": "merchant0039@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "48e3e5c9-5bf1-4548-a459-987462aefe91",
+    "name": "Merchant 0040",
+    "email": "merchant0040@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "4f7e71d6-f650-446d-ac4a-84bd47bde7cc",
+    "name": "Merchant 0041",
+    "email": "merchant0041@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "7d3cf045-1fb8-4ff2-87c9-7b98a101eb7c",
+    "name": "Merchant 0042",
+    "email": "merchant0042@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "c317e4dc-8339-4427-b3b7-72ec3d46423f",
+    "name": "Merchant 0043",
+    "email": "merchant0043@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "1ab670fe-df7b-4d20-95f2-5749eb41aea8",
+    "name": "Merchant 0044",
+    "email": "merchant0044@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "783f0b72-bef9-49fe-bc08-a437ce0ae90d",
+    "name": "Merchant 0045",
+    "email": "merchant0045@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "b391debb-3270-47d9-a542-c408c47ed8a2",
+    "name": "Merchant 0046",
+    "email": "merchant0046@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "658be1f5-bc8d-46e1-80e8-5e3877511240",
+    "name": "Merchant 0047",
+    "email": "merchant0047@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "4776e10f-5758-4105-ba96-8ef36adb3969",
+    "name": "Merchant 0048",
+    "email": "merchant0048@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "f9ffdb38-ca15-4785-a4c8-6fe8f101de33",
+    "name": "Merchant 0049",
+    "email": "merchant0049@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "a17bebde-8d30-433d-8163-3aa239613b04",
+    "name": "Merchant 0050",
+    "email": "merchant0050@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "a9bafc5f-6461-4878-93fa-588fd57dbc69",
+    "name": "Merchant 0051",
+    "email": "merchant0051@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "7853d3cd-b4fe-4f75-aa07-96750352e148",
+    "name": "Merchant 0052",
+    "email": "merchant0052@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "3f3a364a-f976-4258-bd24-0a70b2db8d13",
+    "name": "Merchant 0053",
+    "email": "merchant0053@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "8b83fea2-d782-43d2-a35e-d028c36db20a",
+    "name": "Merchant 0054",
+    "email": "merchant0054@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "acf67765-2a39-4d71-a280-261b1128d514",
+    "name": "Merchant 0055",
+    "email": "merchant0055@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "12d18a52-3237-425c-9969-ecd5b995f709",
+    "name": "Merchant 0056",
+    "email": "merchant0056@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "96197456-8603-4f92-b1a0-414bbc77ec63",
+    "name": "Merchant 0057",
+    "email": "merchant0057@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "4e335347-d2c8-40c3-af62-8d3abca64280",
+    "name": "Merchant 0058",
+    "email": "merchant0058@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "fa892b29-f2f3-43bd-ba2c-6d0a5fcd51bb",
+    "name": "Merchant 0059",
+    "email": "merchant0059@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "3aa68f5d-1cbf-41d9-9ad5-630ac9b3ee4b",
+    "name": "Merchant 0060",
+    "email": "merchant0060@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "11294dda-62f3-407d-88b8-ff84b0e1d616",
+    "name": "Merchant 0061",
+    "email": "merchant0061@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "648ceeea-09be-44c1-9c0c-e074b465408f",
+    "name": "Merchant 0062",
+    "email": "merchant0062@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "2e24a37a-20d3-4373-a652-a20ec7a4d37b",
+    "name": "Merchant 0063",
+    "email": "merchant0063@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "b331902b-e79f-4f3b-a628-74d543579ffe",
+    "name": "Merchant 0064",
+    "email": "merchant0064@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "0724ae4f-fb3b-424e-a908-b5d3dd50304c",
+    "name": "Merchant 0065",
+    "email": "merchant0065@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "3f3817f1-1462-4f1a-836a-6275a2f80af4",
+    "name": "Merchant 0066",
+    "email": "merchant0066@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "b7abfd60-cf7b-4239-936e-1c373b74df3a",
+    "name": "Merchant 0067",
+    "email": "merchant0067@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "9354654d-c622-455d-94b2-665730f271bc",
+    "name": "Merchant 0068",
+    "email": "merchant0068@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "cd00ec6d-f0ef-4a34-b474-5893c4a22bda",
+    "name": "Merchant 0069",
+    "email": "merchant0069@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "5799c383-847e-42f4-b672-0f0db582c3e0",
+    "name": "Merchant 0070",
+    "email": "merchant0070@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "7e8b33d9-9469-4aae-93d6-6e6d18f32e4d",
+    "name": "Merchant 0071",
+    "email": "merchant0071@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "697b6765-24c9-4a85-b6ca-e4cdb9b0f5ba",
+    "name": "Merchant 0072",
+    "email": "merchant0072@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "06077faa-9cb3-4b70-84d5-ca7775f8b05f",
+    "name": "Merchant 0073",
+    "email": "merchant0073@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "5715a036-05fb-4385-b98a-8f5cad9d5a22",
+    "name": "Merchant 0074",
+    "email": "merchant0074@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "fb464032-2a8a-41d2-96c7-6a1f6357db13",
+    "name": "Merchant 0075",
+    "email": "merchant0075@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "383fdf15-53ac-4bd6-b1fe-338324b4ffa0",
+    "name": "Merchant 0076",
+    "email": "merchant0076@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "4c324a87-5870-415c-9f47-23a8744fc576",
+    "name": "Merchant 0077",
+    "email": "merchant0077@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "9a125c92-a042-476d-8fb0-a620a9e3589a",
+    "name": "Merchant 0078",
+    "email": "merchant0078@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "64842d88-6886-4172-965f-4f17a02150bc",
+    "name": "Merchant 0079",
+    "email": "merchant0079@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "3acb7cb8-ad2a-4d06-9689-47c266c49c5c",
+    "name": "Merchant 0080",
+    "email": "merchant0080@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "bb948d96-570a-4ac8-965f-5268fa67164d",
+    "name": "Merchant 0081",
+    "email": "merchant0081@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "1020de7a-aee2-4d48-b40b-40c5a5c56615",
+    "name": "Merchant 0082",
+    "email": "merchant0082@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "a355c050-3953-44c1-a306-47c127f0afa0",
+    "name": "Merchant 0083",
+    "email": "merchant0083@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "459f12f6-6b32-4eb2-8645-ad6dcb6937b7",
+    "name": "Merchant 0084",
+    "email": "merchant0084@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "01663238-90e1-4ef2-952f-b4fcb2dbd0b3",
+    "name": "Merchant 0085",
+    "email": "merchant0085@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "148aed10-4241-4057-8e4b-a06ff3cdf6a2",
+    "name": "Merchant 0086",
+    "email": "merchant0086@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "10189226-3dd8-45a5-9edc-84a81e2c86f8",
+    "name": "Merchant 0087",
+    "email": "merchant0087@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "6c1e6f48-d586-46af-b15d-a92ff3966292",
+    "name": "Merchant 0088",
+    "email": "merchant0088@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "2e4ad50c-19c9-4e26-9cd5-99e94ac07bc8",
+    "name": "Merchant 0089",
+    "email": "merchant0089@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "102b79e4-1e6d-4829-adb0-6ca8b0f0dd80",
+    "name": "Merchant 0090",
+    "email": "merchant0090@example.com",
+    "currency": "INR",
+    "industry": "SAAS"
+  },
+  {
+    "id": "52519ef4-0708-4450-8cc4-17e413070b3f",
+    "name": "Merchant 0091",
+    "email": "merchant0091@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "bcfc465a-6ad7-42ac-a489-ea9499a789b6",
+    "name": "Merchant 0092",
+    "email": "merchant0092@example.com",
+    "currency": "INR",
+    "industry": "B2B_SERVICES"
+  },
+  {
+    "id": "3e66fa7d-cf52-4a52-8423-d1574ad98a32",
+    "name": "Merchant 0093",
+    "email": "merchant0093@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "62ceee63-f1d3-45f3-a7ce-937b02f5c4b6",
+    "name": "Merchant 0094",
+    "email": "merchant0094@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "14d48a34-b2f6-4150-a175-e90d6f254b41",
+    "name": "Merchant 0095",
+    "email": "merchant0095@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "7f3c808b-fbfd-4d13-87b1-bc9f7ad8a8e9",
+    "name": "Merchant 0096",
+    "email": "merchant0096@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "08f6ec66-fc5a-4c84-8ac0-ce20561f280d",
+    "name": "Merchant 0097",
+    "email": "merchant0097@example.com",
+    "currency": "INR",
+    "industry": "SUBSCRIPTION"
+  },
+  {
+    "id": "63e3b518-3828-4d23-bebe-45589dff73ca",
+    "name": "Merchant 0098",
+    "email": "merchant0098@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  },
+  {
+    "id": "d82d9879-e3a3-45d4-bc16-0f02a8592794",
+    "name": "Merchant 0099",
+    "email": "merchant0099@example.com",
+    "currency": "INR",
+    "industry": "EDUCATION"
+  },
+  {
+    "id": "b3ef7f69-2428-421e-8873-27255f5016a0",
+    "name": "Merchant 0100",
+    "email": "merchant0100@example.com",
+    "currency": "INR",
+    "industry": "ECOMMERCE"
+  }
+]
