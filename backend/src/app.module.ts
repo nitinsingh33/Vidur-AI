@@ -4,12 +4,14 @@ import { AppService } from './app.service';
 import { CustomersModule } from './customers/customers.module'
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { RecoveryCasesModule } from './recovery-cases/recovery-cases.module';
 
 @Module({
   imports: [
     PrismaModule, 
     PaymentsModule,
     CustomersModule,
+    RecoveryCasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
