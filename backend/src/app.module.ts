@@ -8,6 +8,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { RecoveryCasesModule } from './recovery-cases/recovery-cases.module';
 import { RiskModule } from './risk/risk.module';
 import { RecoveryModule } from './recovery/recovery.module';
+import { MlModule } from './ml/ml.module';
 
 
 @Module({
@@ -19,6 +20,7 @@ import { RecoveryModule } from './recovery/recovery.module';
     AnalyticsModule,
     RiskModule,
     RecoveryModule,
+    MlModule,
   ],
   controllers: [AppController],
   providers: [AppService],
