@@ -7,6 +7,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RecoveryCasesModule } from './recovery-cases/recovery-cases.module';
 import { RiskModule } from './risk/risk.module';
+import { RecoveryModule } from './recovery/recovery.module';
 
 
 @Module({
@@ -17,6 +18,7 @@ import { RiskModule } from './risk/risk.module';
     RecoveryCasesModule,
     AnalyticsModule,
     RiskModule,
+    RecoveryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

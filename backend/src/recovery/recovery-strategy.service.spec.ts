@@ -1,0 +1,66 @@
+import { RecoveryActionType } from '../generated/prisma/enums';
+import { RecoveryStrategyService } from './recovery-strategy.service';
+
+describe('RecoveryStrategyService', () => {
+  let service: RecoveryStrategyService;
+
+  beforeEach(() => {
+    service = new RecoveryStrategyService();
+  });
+
+  it('should retry payment for insufficient funds', () => {
+    const result = service.determine('insufficient_funds');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.RETRY_PAYMENT,
+    );
+  });
+
+  it('should request payment method update for expired card', () => {
+    const result = service.determine('expired_card');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.UPDATE_PAYMENT_METHOD,
+    );
+  });
+
+  it('should send payment link for checkout abandonment', () => {
+    const result = service.determine('checkout_abandoned');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.SEND_PAYMENT_LINK,
+    );
+  });
+
+  it('should follow up on overdue invoices', () => {
+    const result = service.determine('invoice_overdue');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.FOLLOW_UP_RECEIVABLE,
+    );
+  });
+
+  it('should escalate repeated failures', () => {
+    const result = service.determine('repeated_failure');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.ESCALATE_HUMAN,
+    );
+  });
+
+  it('should normalize root cause casing', () => {
+    const result = service.determine('INSUFFICIENT_FUNDS');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.RETRY_PAYMENT,
+    );
+  });
+
+  it('should use a safe fallback for unknown root causes', () => {
+    const result = service.determine('unknown_reason');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.SEND_PAYMENT_LINK,
+    );
+  });
+});
