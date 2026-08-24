@@ -1,5 +1,6 @@
 import "./Dashboard.css";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   getAnalyticsSummary,
   getRevenueAtRisk,
@@ -14,14 +15,12 @@ import { MetricCard } from "../components/dashboard/MetricCard";
 import { RecoveryCasesTable } from "../components/recovery/RecoveryCasesTable";
 
 interface DashboardProps {
-  showRecoveryCases: boolean;
-  onOpenRecoveryCase: (recoveryCaseId: string) => void;
+  showRecoveryCases?: boolean;
 }
 
-export function Dashboard({
-  showRecoveryCases,
-  onOpenRecoveryCase,
-}: DashboardProps) {
+export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
+  const navigate = useNavigate();
+
   const [revenueAtRisk, setRevenueAtRisk] =
     useState<RevenueAtRiskResponse | null>(null);
 
@@ -139,7 +138,9 @@ export function Dashboard({
       {!loading && !error && (
         <RecoveryCasesTable
           cases={recoveryCases}
-          onOpenRecoveryCase={onOpenRecoveryCase}
+          onOpenRecoveryCase={(recoveryCaseId) =>
+            navigate(`/recovery-cases/${recoveryCaseId}`)
+          }
         />
       )}
     </section>

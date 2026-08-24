@@ -79,3 +79,30 @@ Get-ChildItem frontend/src -Recurse -File |
 Once I see the existing React setup, we'll do **12.1 foundation only** and then start building the Vidur AI interface piece-by-piece.
 
 And yes: **animations where they add value, not animation everywhere.** The target is polished fintech/product UI, not a flashy demo.
+
+
+                    VIDUR AI
+                       │
+              ┌────────┴────────┐
+              │                 │
+        React + TypeScript   React Router
+              │
+       ┌──────┴───────┐
+       │              │
+   Component CSS   shadcn/ui
+       │              │
+       └──────┬───────┘
+              │
+        Framer Motion
+              │
+         Lucide React
+              │
+          API Layer
+              │
+           fetch
+              │
+        NestJS Backend
+              │
+       ┌──────┴───────┐
+       │              │
+   PostgreSQL       Redis

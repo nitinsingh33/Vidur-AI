@@ -7,35 +7,35 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react'
-
-interface SidebarProps {
-  onOpenOverview: () => void
-  onOpenRecoveryCases: () => void
-}
+import { useLocation, useNavigate } from 'react-router-dom'
 
 const navigation = [
   {
     label: 'Overview',
     icon: LayoutDashboard,
+    path: '/',
   },
   {
     label: 'Recovery Cases',
     icon: Activity,
+    path: '/recovery-cases',
   },
   {
     label: 'Agent Activity',
     icon: Bot,
+    path: '/agent-activity',
   },
   {
     label: 'Analytics',
     icon: BarChart3,
+    path: '/analytics',
   },
 ]
 
-export function Sidebar({
-  onOpenOverview,
-  onOpenRecoveryCases,
-}: SidebarProps) {
+export function Sidebar() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -57,29 +57,19 @@ export function Sidebar({
         {navigation.map((item) => {
           const Icon = item.icon
 
-          const handleClick =
-            item.label === 'Overview'
-              ? onOpenOverview
-              : item.label === 'Recovery Cases'
-                ? onOpenRecoveryCases
-                : undefined
+          const active =
+            item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path)
 
           return (
             <button
               key={item.label}
-              className={`nav-item ${
-                item.label === 'Overview'
-                  ? 'active'
-                  : ''
-              }`}
+              className={`nav-item ${active ? 'active' : ''}`}
               type="button"
-              onClick={handleClick}
+              onClick={() => navigate(item.path)}
             >
-              <Icon
-                size={18}
-                strokeWidth={1.8}
-              />
-
+              <Icon size={18} strokeWidth={1.8} />
               <span>{item.label}</span>
             </button>
           )
@@ -90,24 +80,18 @@ export function Sidebar({
         <button
           className="nav-item"
           type="button"
+          onClick={() => navigate('/policies')}
         >
-          <ShieldCheck
-            size={18}
-            strokeWidth={1.8}
-          />
-
+          <ShieldCheck size={18} strokeWidth={1.8} />
           <span>Policies</span>
         </button>
 
         <button
           className="nav-item"
           type="button"
+          onClick={() => navigate('/settings')}
         >
-          <Settings
-            size={18}
-            strokeWidth={1.8}
-          />
-
+          <Settings size={18} strokeWidth={1.8} />
           <span>Settings</span>
         </button>
 

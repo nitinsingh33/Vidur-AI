@@ -1,15 +1,14 @@
+import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, CheckCircle2, Clock3, XCircle } from 'lucide-react'
 import {
   getRecoveryCase,
   type RecoveryCase,
 } from '../api/recoveryCases'
+import { VidurRecoveryPanel } from '../components/recovery/VidurRecoveryPanel'
 import './RecoveryCaseDetails.css'
 
-interface RecoveryCaseDetailsProps {
-  recoveryCaseId: string
-  onBack: () => void
-}
+interface RecoveryCaseDetailsProps {}
 
 function formatAmount(
   amount: string,
@@ -46,10 +45,14 @@ function getActionIcon(status: string) {
   return <Clock3 size={16} />
 }
 
-export function RecoveryCaseDetails({
-  recoveryCaseId,
-  onBack,
-}: RecoveryCaseDetailsProps) {
+export function RecoveryCaseDetails(
+  _props: RecoveryCaseDetailsProps,
+) {
+  const { recoveryCaseId } = useParams<{
+    recoveryCaseId: string
+  }>()
+
+  const navigate = useNavigate()
   const [recoveryCase, setRecoveryCase] =
     useState<RecoveryCase | null>(null)
 
@@ -61,6 +64,10 @@ export function RecoveryCaseDetails({
       try {
         setLoading(true)
         setError(null)
+
+        if (!recoveryCaseId) {
+          return
+        }
 
         const data = await getRecoveryCase(
           recoveryCaseId,
@@ -97,7 +104,7 @@ export function RecoveryCaseDetails({
         <button
           className="back-button"
           type="button"
-          onClick={onBack}
+          onClick={() => navigate('/recovery-cases')}
         >
           <ArrowLeft size={17} />
           Back to recovery cases
@@ -119,7 +126,7 @@ export function RecoveryCaseDetails({
       <button
         className="back-button"
         type="button"
-        onClick={onBack}
+        onClick={() => navigate('/recovery-cases')}
       >
         <ArrowLeft size={17} />
         Back to recovery cases
@@ -176,6 +183,13 @@ export function RecoveryCaseDetails({
           </strong>
         </article>
       </div>
+
+      <VidurRecoveryPanel
+        recoveryCaseId={recoveryCase.id}
+        onCompleted={() => {
+          window.location.reload()
+        }}
+      />
 
       <div className="case-details-grid">
         <article className="details-card">

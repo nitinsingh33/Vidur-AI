@@ -8,8 +8,13 @@ export interface RecoveryAction {
   policyDecision: string | null
   attemptedAt: string | null
   completedAt: string | null
-  result?: Record<string, unknown> | null
   createdAt: string
+
+  result: {
+    message?: string
+    successful?: boolean
+    escalated?: boolean
+  } | null
 }
 
 export interface PaymentEvent {
@@ -98,6 +103,63 @@ export async function getRecoveryCase(
   if (!response.ok) {
     throw new Error(
       `Recovery case request failed: ${response.status}`,
+    )
+  }
+
+  return response.json()
+}
+
+export async function createRecoveryStrategy(
+  recoveryCaseId: string,
+): Promise<RecoveryAction> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/strategy`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Strategy request failed: ${response.status}`,
+    )
+  }
+
+  return response.json()
+}
+
+export async function executeRecoveryAction(
+  recoveryCaseId: string,
+): Promise<RecoveryAction> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/execute`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Recovery execution failed: ${response.status}`,
+    )
+  }
+
+  return response.json()
+}
+
+export async function observeRecovery(
+  recoveryCaseId: string,
+): Promise<RecoveryOutcome> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/observe`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Recovery observation failed: ${response.status}`,
     )
   }
 
