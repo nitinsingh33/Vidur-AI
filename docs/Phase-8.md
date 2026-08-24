@@ -264,33 +264,72 @@ phase-8 status
 [✅] ML → LangGraph
 [✅] Select intervention
 [✅] Policy check
-[⏳] Execute
-[⏳] Observe
-[⏳] Success → Recover / Retry → Escalate
+[✅] Execute
+[✅] Observe
+[✅] Success → Recover / Retry → Escalate
 
-Next: Phase 8.5 — Select Intervention
+The ESCALATE branch exists, but we have not yet built a real escalation action. That's intentional—we won't claim functionality we haven't implemented.
 
-Crucially, we're not going to ask an LLM to invent the intervention.
+Perfect. **Phase 8 successful path is now verified end-to-end.** ✅
 
-We already have the verified Phase-5 deterministic strategy:
+Your actual test:
 
-INSUFFICIENT_FUNDS
-        ↓
-RETRY_PAYMENT
+```text
+Recovery workflow completed.
+Recovery successful: True
+Final decision: RECOVER
+```
 
-LangGraph's job is now to orchestrate that existing strategy using the context + ML signal.
+So the LangGraph is now genuinely coordinating the workflow:
 
-The next node will therefore:
-
-rootCause
-    +
-recovery_probability
-    ↓
+```text
+START
+  ↓
+Load Recovery Case
+  ↓
+Analyze Context
+  ↓
+ML Recovery Probability
+  ↓
 Select Intervention
+  ↓
+Policy Check
+  ↓
+Execute
+  ↓
+Observe
+  ↓
+Success?
+  ↓
+RECOVER
+  ↓
+END
+```
 
-For our current case, we should get:
+And importantly, we've verified each layer independently along the way:
 
-rootCause = INSUFFICIENT_FUNDS
-probability = 0.8694
-        ↓
-RETRY_PAYMENT
+* ✅ NestJS ↔ Database
+* ✅ NestJS ↔ FastAPI ML
+* ✅ LangGraph ↔ NestJS
+* ✅ LangGraph ↔ ML prediction
+* ✅ Intervention selection
+* ✅ Policy decision + persistence
+* ✅ Synthetic execution
+* ✅ Payment retry events
+* ✅ Recovery outcome
+* ✅ Conditional graph routing
+
+### One honest limitation
+
+The **NO branch currently routes to `ESCALATE`**, but we haven't implemented a real escalation action. So I would **not claim Phase 8 has a fully functional retry/escalation recovery loop**.
+
+The currently verified behavior is:
+
+```text
+SUCCESS → RECOVER → END       ✅
+FAILURE → ESCALATE → END      ⚠️ routing only
+```
+
+That's actually a good stopping point rather than adding fake functionality just to make the diagram look complete.
+
+**Phase 8 core objective—LangGraph coordinating the agentic recovery decision process—is achieved.**

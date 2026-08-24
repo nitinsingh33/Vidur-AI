@@ -106,11 +106,36 @@ export class PolicyService {
   const retryCount =
     recoveryCase.payment?.attemptNumber ?? 0;
 
-  return this.check(
-    recoveryCase.merchantId,
-    actionType as RecoveryActionType,
-    amount,
-    retryCount,
-  );
+  const result = await this.check(
+  recoveryCase.merchantId,
+  actionType as RecoveryActionType,
+  amount,
+  retryCount,
+);
+
+const action =
+  await this.prisma.recoveryAction.findFirst({
+    where: {
+      recoveryCaseId,
+      type: actionType as RecoveryActionType,
+      status: 'PENDING',
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+if (action) {
+  await this.prisma.recoveryAction.update({
+    where: {
+      id: action.id,
+    },
+    data: {
+      policyDecision: result.decision,
+    },
+  });
+}
+
+return result;
 }
 }

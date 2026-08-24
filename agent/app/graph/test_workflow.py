@@ -7,7 +7,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.graph.workflow import build_recovery_graph
 
 RECOVERY_CASE_ID = (
-    "77165de0-ecb1-44b8-a31e-301df389978d"
+    "80738502-b206-4395-b4d6-c2e79f3f4c8e"
 )
 
 
@@ -23,11 +23,16 @@ def main():
 
     recovery_case = result["recovery_case"]
 
-    print("Intervention selection successful.")
+    print("Recovery workflow completed.")
     print(
-        f"Candidate intervention: "
-        f"{result['candidate_intervention']}"
+        f"Recovery successful: "
+        f"{result['success']}"
     )
 
+    if result["success"]:
+        print("Final decision: RECOVER")
+    else:
+        print("Final decision: ESCALATE")
+    
 if __name__ == "__main__":
     main()
