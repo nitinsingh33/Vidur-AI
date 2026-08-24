@@ -13,7 +13,7 @@ const navigation = [
   {
     label: 'Overview',
     icon: LayoutDashboard,
-    path: '/',
+    path: '/dashboard',
   },
   {
     label: 'Recovery Cases',

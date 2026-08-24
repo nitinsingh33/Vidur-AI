@@ -407,3 +407,19 @@ button:focus-visible {
     @apply font-sans;
   }
 }
+
+/* Vidur AI application atmosphere */
+
+.app-main {
+  background:
+    radial-gradient(
+      circle at 82% 0%,
+      rgba(109, 99, 255, 0.055),
+      transparent 30%
+    ),
+    #f7f8fa;
+}
+
+.page-content {
+  position: relative;
+}

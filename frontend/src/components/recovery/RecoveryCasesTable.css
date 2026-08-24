@@ -154,3 +154,24 @@
     padding: 18px;
   }
 }
+
+.recovery-table tbody tr {
+  cursor: pointer;
+}
+
+.recovery-table tbody tr:hover {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(109, 99, 255, 0.025),
+      rgba(109, 99, 255, 0.01)
+    );
+}
+
+.recovery-table td:first-child {
+  padding-left: 14px;
+}
+
+.recovery-table th:first-child {
+  padding-left: 14px;
+}

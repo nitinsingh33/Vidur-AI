@@ -1,10 +1,10 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { Sidebar } from "./components/layout/Sidebar";
-import { Topbar } from "./components/layout/Topbar";
-import { Dashboard } from "./pages/Dashboard";
-import { RecoveryCaseDetails } from "./pages/RecoveryCaseDetails";
-import { Landing } from "./pages/Landing";
-import "./index.css";
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Sidebar } from './components/layout/Sidebar'
+import { Topbar } from './components/layout/Topbar'
+import { Dashboard } from './pages/Dashboard'
+import { Landing } from './pages/Landing'
+import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
+import './index.css'
 
 function AppShell() {
   return (
@@ -16,8 +16,6 @@ function AppShell() {
 
         <main className="page-content">
           <Routes>
-            <Route path="/" element={<Landing />} />
-
             <Route path="/dashboard" element={<Dashboard />} />
 
             <Route
@@ -30,20 +28,27 @@ function AppShell() {
               element={<RecoveryCaseDetails />}
             />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="*"
+              element={<Navigate to="/dashboard" replace />}
+            />
           </Routes>
         </main>
       </div>
     </div>
-  );
+  )
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <AppShell />
+      <Routes>
+        <Route path="/" element={<Landing />} />
+
+        <Route path="/*" element={<AppShell />} />
+      </Routes>
     </BrowserRouter>
-  );
+  )
 }
 
-export default App;
+export default App
