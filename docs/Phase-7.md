@@ -8,3 +8,18 @@ PHASE 7 — Python Service
 [✅] NestJS → FastAPI HTTP communication
 [✅] NestJS build
 [✅] Full test suite: 17/17
+
+
+                    RecoverAI
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+         NestJS :3000        FastAPI :8001
+             │                   │
+             │ HTTP              │
+             └──────────►────────┘
+                         │
+                    ML Model
+                         │
+                         ▼
+                recovery_probability

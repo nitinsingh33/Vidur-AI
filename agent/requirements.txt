@@ -3,3 +3,6 @@ uvicorn
 pandas
 scikit-learn
 joblib
+langgraph
+langchain-core
+requests

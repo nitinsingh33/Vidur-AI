@@ -152,6 +152,35 @@ async function main() {
   });
   console.log("Invoices inserted.");
 
+  const recoveryMerchant = merchants.find(
+    (merchant: any) =>
+      merchant.id ===
+      "63e3b518-3828-4d23-bebe-45589dff73ca",
+  );
+
+  if (!recoveryMerchant) {
+    throw new Error(
+      "Target merchant for recovery policy not found.",
+    );
+  }
+
+  await prisma.policy.create({
+    data: {
+      merchantId: recoveryMerchant.id,
+      name: "Allow payment retry",
+      description:
+        "Allow retrying failed payments as part of recovery.",
+      actionType: "RETRY_PAYMENT",
+      decision: "ALLOW",
+      enabled: true,
+      maxRetries: 3,
+    },
+  });
+
+  console.log(
+    `Recovery policy inserted for merchant ${recoveryMerchant.id}.`,
+  );
+
   console.log("RecoverAI synthetic database seed completed successfully.");
 }
 

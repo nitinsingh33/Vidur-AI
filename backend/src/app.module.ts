@@ -9,6 +9,7 @@ import { RecoveryCasesModule } from './recovery-cases/recovery-cases.module';
 import { RiskModule } from './risk/risk.module';
 import { RecoveryModule } from './recovery/recovery.module';
 import { MlModule } from './ml/ml.module';
+import { PolicyModule } from './policy/policy.module';
 
 
 @Module({
@@ -21,6 +22,7 @@ import { MlModule } from './ml/ml.module';
     RiskModule,
     RecoveryModule,
     MlModule,
+    PolicyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
