@@ -5,6 +5,8 @@ import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.graph.workflow import build_recovery_graph
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,6 +46,16 @@ class RecoveryPredictionRequest(BaseModel):
 class RecoveryPredictionResponse(BaseModel):
     recovery_probability: float
 
+class RecoveryWorkflowRequest(BaseModel):
+    recovery_case_id: str
+
+
+class RecoveryWorkflowResponse(BaseModel):
+    recovery_case_id: str
+    success: bool | None
+    policy_decision: str | None
+    candidate_intervention: str | None
+
 
 app = FastAPI(
     title="RecoverAI ML Service",
@@ -80,4 +92,29 @@ def predict_recovery(
             float(probability),
             4,
         )
+    )
+
+@app.post(
+    "/run-recovery",
+    response_model=RecoveryWorkflowResponse,
+)
+def run_recovery(
+    request: RecoveryWorkflowRequest,
+):
+    graph = build_recovery_graph()
+
+    result = graph.invoke(
+        {
+            "recovery_case_id": request.recovery_case_id,
+            "attempt": 0,
+        }
+    )
+
+    return RecoveryWorkflowResponse(
+        recovery_case_id=request.recovery_case_id,
+        success=result.get("success"),
+        policy_decision=result.get("policy_decision"),
+        candidate_intervention=result.get(
+            "candidate_intervention"
+        ),
     )

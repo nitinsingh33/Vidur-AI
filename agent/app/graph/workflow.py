@@ -134,6 +134,13 @@ def policy_check(
         "policy_decision": policy["decision"],
     }
 
+def route_after_policy(
+    state: RecoveryAgentState,
+) -> str:
+    if state.get("policy_decision") == "ALLOW":
+        return "execute"
+
+    return "escalate"
 
 def execute(
     state: RecoveryAgentState,
@@ -233,10 +240,14 @@ def build_recovery_graph():
         "select_intervention",
         "policy_check",
     )
-    graph.add_edge(
-        "policy_check",
-        "execute",
-    )
+    graph.add_conditional_edges(
+    "policy_check",
+    route_after_policy,
+    {
+        "execute": "execute",
+        "escalate": "escalate",
+    },
+)
     graph.add_edge(
         "execute",
         "observe",

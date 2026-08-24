@@ -13,11 +13,21 @@ import { PolicyModule } from './policy/policy.module';
 import { RazorpayModule } from './razorpay/razorpay.module';
 import { NotificationModule } from './notification/notification.module';
 import { EscalationModule } from './escalation/escalation.module';
+import { BullModule } from '@nestjs/bullmq';
+import { RecoveryQueueModule } from './recovery-queue/recovery-queue.module';
 
 
 @Module({
   imports: [
-    PrismaModule, 
+    PrismaModule,
+    
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
+
     PaymentsModule,
     CustomersModule,
     RecoveryCasesModule,
@@ -29,6 +39,7 @@ import { EscalationModule } from './escalation/escalation.module';
     RazorpayModule,
     NotificationModule,
     EscalationModule,
+    RecoveryQueueModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,8 +6,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.graph.workflow import build_recovery_graph
 
+
 RECOVERY_CASE_ID = (
-    "80738502-b206-4395-b4d6-c2e79f3f4c8e"
+    "e2137214-1123-4ba2-9310-bbe8e9a9bf51"
 )
 
 
@@ -21,18 +22,21 @@ def main():
         }
     )
 
-    recovery_case = result["recovery_case"]
-
-    print("Recovery workflow completed.")
+    print("Policy routing completed.")
     print(
-        f"Recovery successful: "
-        f"{result['success']}"
+        f"Candidate intervention: "
+        f"{result['candidate_intervention']}"
+    )
+    print(
+        f"Policy decision: "
+        f"{result['policy_decision']}"
     )
 
-    if result["success"]:
-        print("Final decision: RECOVER")
+    if result["policy_decision"] == "ALLOW":
+        print("Policy branch: EXECUTE")
     else:
-        print("Final decision: ESCALATE")
-    
+        print("Policy branch: ESCALATE")
+
+
 if __name__ == "__main__":
     main()
