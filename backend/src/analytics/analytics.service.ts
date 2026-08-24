@@ -60,4 +60,65 @@ export class AnalyticsService {
       successfulRecoveries: result._count.id,
     };
   }
+
+  async getSummary(merchantId?: string) {
+    const activeStatuses: RecoveryCaseStatus[] = [
+      RecoveryCaseStatus.OPEN,
+      RecoveryCaseStatus.ELIGIBLE,
+      RecoveryCaseStatus.IN_PROGRESS,
+      RecoveryCaseStatus.ESCALATED,
+    ];
+
+    const [
+      activeRecoveryCases,
+      agentActions,
+      failedActions,
+      escalations,
+    ] = await Promise.all([
+      this.prisma.recoveryCase.count({
+        where: {
+          ...(merchantId && { merchantId }),
+          status: {
+            in: activeStatuses,
+          },
+        },
+      }),
+
+      this.prisma.recoveryAction.count({
+        where: {
+          ...(merchantId && {
+            recoveryCase: {
+              merchantId,
+            },
+          }),
+        },
+      }),
+
+      this.prisma.recoveryAction.count({
+        where: {
+          status: 'FAILED',
+          ...(merchantId && {
+            recoveryCase: {
+              merchantId,
+            },
+          }),
+        },
+      }),
+
+      this.prisma.recoveryCase.count({
+        where: {
+          status: RecoveryCaseStatus.ESCALATED,
+          ...(merchantId && { merchantId }),
+        },
+      }),
+    ]);
+
+    return {
+      activeRecoveryCases,
+      agentActions,
+      failedActions,
+      escalations,
+    };
+  }
+
 }

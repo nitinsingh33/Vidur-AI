@@ -1,0 +1,40 @@
+
+.metric-card {
+  min-height: 156px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow:
+    0 8px 24px rgba(16, 24, 40, 0.06);
+}
+
+.metric-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.metric-value {
+  margin-top: 17px;
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -1px;
+}
+
+.metric-description {
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: 11px;
+}

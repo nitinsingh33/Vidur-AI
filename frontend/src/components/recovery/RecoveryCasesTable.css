@@ -1,0 +1,156 @@
+
+.recovery-section {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-heading {
+  margin-bottom: 22px;
+}
+
+.section-eyebrow {
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.35px;
+}
+
+.section-heading p:last-child {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.recovery-table-wrapper {
+  overflow-x: auto;
+}
+
+.recovery-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.recovery-table th {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.recovery-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.recovery-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.recovery-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.recovery-table tbody tr:hover {
+  background: var(--surface-muted);
+}
+
+.customer-cell,
+.action-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.customer-cell strong,
+.action-cell strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.customer-cell span,
+.action-cell span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.risk-low {
+  background: #f2faf5;
+  color: #26734d;
+  border-color: #cce8d7;
+}
+
+.risk-medium {
+  background: #fff9ed;
+  color: #946c18;
+  border-color: #f0dfb2;
+}
+
+.risk-high,
+.risk-critical {
+  background: #fff3f3;
+  color: #b13c45;
+  border-color: #f0c8cc;
+}
+
+.status-eligible,
+.status-open,
+.status-in_progress {
+  background: #f4f7ff;
+  color: #4563a8;
+  border-color: #d8e0f5;
+}
+
+.status-escalated {
+  background: #fff5ed;
+  color: #a75c24;
+  border-color: #efd5bc;
+}
+
+.recovery-row {
+  cursor: pointer;
+}
+
+.recovery-row:hover {
+  background-color: #f8fafc;
+}
+
+
+@media (max-width: 900px) {
+  .recovery-section {
+    padding: 18px;
+  }
+}

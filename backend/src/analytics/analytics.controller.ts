@@ -27,4 +27,12 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getRevenueRecovered(merchantId);
   }
+
+  @Get('summary')
+  getSummary(
+    @Query('merchantId', new ParseUUIDPipe({ optional: true }))
+    merchantId?: string,
+  ) {
+    return this.analyticsService.getSummary(merchantId);
+  }
 }
