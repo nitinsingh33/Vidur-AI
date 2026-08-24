@@ -12,6 +12,7 @@ import { MlModule } from './ml/ml.module';
 import { PolicyModule } from './policy/policy.module';
 import { RazorpayModule } from './razorpay/razorpay.module';
 import { NotificationModule } from './notification/notification.module';
+import { EscalationModule } from './escalation/escalation.module';
 
 
 @Module({
@@ -27,6 +28,7 @@ import { NotificationModule } from './notification/notification.module';
     PolicyModule,
     RazorpayModule,
     NotificationModule,
+    EscalationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
