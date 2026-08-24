@@ -3,6 +3,7 @@ import requests
 from langgraph.graph import END, START, StateGraph
 
 from .state import RecoveryAgentState
+from ..tools.payment_tool import payment_tool
 
 FASTAPI_URL = "http://localhost:8001"
 NESTJS_URL = "http://localhost:3000"
@@ -137,21 +138,15 @@ def policy_check(
 def execute(
     state: RecoveryAgentState,
 ) -> RecoveryAgentState:
-    recovery_case_id = state["recovery_case_id"]
+    order_id = "order_TTVRA9M1hB1gg3"
 
-    response = requests.post(
-        f"{NESTJS_URL}/recovery/cases/"
-        f"{recovery_case_id}/execute",
-        timeout=10,
-    )
-
-    response.raise_for_status()
-
-    execution_result = response.json()
+    payment_result = payment_tool.invoke({
+        "order_id": order_id,
+    })
 
     return {
         **state,
-        "execution_result": execution_result,
+        "execution_result": payment_result,
     }
 
 

@@ -10,6 +10,8 @@ import { RiskModule } from './risk/risk.module';
 import { RecoveryModule } from './recovery/recovery.module';
 import { MlModule } from './ml/ml.module';
 import { PolicyModule } from './policy/policy.module';
+import { RazorpayModule } from './razorpay/razorpay.module';
+import { NotificationModule } from './notification/notification.module';
 
 
 @Module({
@@ -23,6 +25,8 @@ import { PolicyModule } from './policy/policy.module';
     RecoveryModule,
     MlModule,
     PolicyModule,
+    RazorpayModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
