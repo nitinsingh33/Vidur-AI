@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  AlertTriangle,
   Bot,
   CheckCircle2,
   Loader2,
@@ -10,10 +11,13 @@ import {
   createRecoveryStrategy,
   executeRecoveryAction,
   observeRecovery,
+  runAgentRecovery,
+  type AgentRecoveryResult,
   type RecoveryAction,
   type RecoveryOutcome,
 } from '../../api/recoveryCases'
 import './VidurRecoveryPanel.css'
+
 
 interface VidurRecoveryPanelProps {
   recoveryCaseId: string
@@ -28,11 +32,15 @@ type PanelState =
   | 'executed'
   | 'observing'
   | 'completed'
+  | 'agent-running'
+  | 'escalated'
 
 export function VidurRecoveryPanel({
   recoveryCaseId,
   onCompleted,
 }: VidurRecoveryPanelProps) {
+  const [agentResult, setAgentResult] =
+  useState<AgentRecoveryResult | null>(null)
   const [state, setState] = useState<PanelState>('idle')
   const [action, setAction] =
     useState<RecoveryAction | null>(null)
@@ -102,6 +110,27 @@ export function VidurRecoveryPanel({
     }
   }
 
+  async function handleRunAgent() {
+    try {
+      setError(null);
+      setState("agent-running");
+
+      const result = await runAgentRecovery(recoveryCaseId);
+      setAgentResult(result);
+
+      if (result.success === true) {
+        setState("completed");
+        onCompleted?.();
+      } else {
+        setState("escalated");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Agent recovery failed.");
+      setState("idle");
+    }
+  }
+
+
   const actionLabel =
     action?.type
       ?.toLowerCase()
@@ -119,9 +148,7 @@ export function VidurRecoveryPanel({
           </div>
 
           <div>
-            <p className="vidur-eyebrow">
-              Vidur AI
-            </p>
+            <p className="vidur-eyebrow">Vidur AI</p>
 
             <h2>Recovery intelligence</h2>
           </div>
@@ -134,7 +161,7 @@ export function VidurRecoveryPanel({
       </div>
 
       <div className="vidur-content">
-        {state === 'idle' && (
+        {state === "idle" && (
           <>
             <div className="vidur-recommendation">
               <div className="recommendation-icon">
@@ -142,18 +169,13 @@ export function VidurRecoveryPanel({
               </div>
 
               <div>
-                <span>
-                  Recommended next step
-                </span>
+                <span>Recommended next step</span>
 
-                <strong>
-                  Generate recovery strategy
-                </strong>
+                <strong>Generate recovery strategy</strong>
 
                 <p>
-                  Vidur will evaluate this recovery
-                  case and select the appropriate
-                  intervention.
+                  Vidur will evaluate this recovery case and select the
+                  appropriate intervention.
                 </p>
               </div>
             </div>
@@ -161,28 +183,33 @@ export function VidurRecoveryPanel({
             <button
               className="vidur-primary-button"
               type="button"
-              onClick={handleGenerateStrategy}
-            >
+              onClick={handleGenerateStrategy}>
               <Sparkles size={17} />
               Generate Strategy
+            </button>
+            <div className="vidur-divider">
+              <span>or run full agent</span>
+            </div>
+
+            <button
+              className="vidur-secondary-button"
+              type="button"
+              onClick={handleRunAgent}>
+              <Bot size={16} />
+              Run Full Agent Recovery
             </button>
           </>
         )}
 
-        {state === 'generating' && (
+        {state === "generating" && (
           <div className="vidur-loading">
-            <Loader2
-              size={20}
-              className="spin"
-            />
+            <Loader2 size={20} className="spin" />
 
-            <span>
-              Vidur is evaluating the recovery case...
-            </span>
+            <span>Vidur is evaluating the recovery case...</span>
           </div>
         )}
 
-        {state === 'ready' && action && (
+        {state === "ready" && action && (
           <>
             <div className="vidur-result">
               <div className="result-heading">
@@ -191,19 +218,14 @@ export function VidurRecoveryPanel({
                 <strong>{actionLabel}</strong>
               </div>
 
-              {action.reason && (
-                <p>{action.reason}</p>
-              )}
+              {action.reason && <p>{action.reason}</p>}
 
               {action.policyDecision && (
                 <div className="policy-check">
                   <CheckCircle2 size={17} />
 
                   <span>
-                    Policy:{' '}
-                    <strong>
-                      {action.policyDecision}
-                    </strong>
+                    Policy: <strong>{action.policyDecision}</strong>
                   </span>
                 </div>
               )}
@@ -212,40 +234,32 @@ export function VidurRecoveryPanel({
             <button
               className="vidur-primary-button"
               type="button"
-              onClick={handleExecute}
-            >
+              onClick={handleExecute}>
               <Play size={16} />
               Execute Recovery
             </button>
           </>
         )}
 
-        {state === 'executing' && (
+        {state === "executing" && (
           <div className="vidur-loading">
-            <Loader2
-              size={20}
-              className="spin"
-            />
+            <Loader2 size={20} className="spin" />
 
-            <span>
-              Vidur is executing the recovery action...
-            </span>
+            <span>Vidur is executing the recovery action...</span>
           </div>
         )}
 
-        {state === 'executed' && action && (
+        {state === "executed" && action && (
           <>
             <div className="vidur-success">
               <CheckCircle2 size={22} />
 
               <div>
-                <strong>
-                  Recovery action executed
-                </strong>
+                <strong>Recovery action executed</strong>
 
                 <span>
                   {action.result?.message ??
-                    'The recovery action has completed.'}
+                    "The recovery action has completed."}
                 </span>
               </div>
             </div>
@@ -253,58 +267,82 @@ export function VidurRecoveryPanel({
             <button
               className="vidur-primary-button"
               type="button"
-              onClick={handleObserve}
-            >
+              onClick={handleObserve}>
               <Play size={16} />
               Observe Recovery
             </button>
           </>
         )}
 
-        {state === 'observing' && (
+        {state === "observing" && (
           <div className="vidur-loading">
-            <Loader2
-              size={20}
-              className="spin"
-            />
+            <Loader2 size={20} className="spin" />
 
-            <span>
-              Vidur is recording the recovery outcome...
-            </span>
+            <span>Vidur is recording the recovery outcome...</span>
           </div>
         )}
 
-        {state === 'completed' && outcome && (
+        {state === "agent-running" && (
+          <div className="vidur-loading">
+            <Loader2 size={20} className="spin" />
+            <span>Agent is running full recovery workflow...</span>
+          </div>
+        )}
+
+        {state === "completed" && outcome && (
           <div className="vidur-success completed">
             <CheckCircle2 size={24} />
 
             <div>
               <strong>
                 {outcome.successful
-                  ? 'Recovery completed'
-                  : 'Recovery unsuccessful'}
+                  ? "Recovery completed"
+                  : "Recovery unsuccessful"}
               </strong>
 
               <span>
                 {outcome.successful
-                  ? `₹${Number(
-                      outcome.recoveredAmount,
-                    ).toLocaleString('en-IN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })} recovered`
-                  : 'No revenue was recovered.'}
+                  ? `₹${Number(outcome.recoveredAmount).toLocaleString(
+                      "en-IN",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      },
+                    )} recovered`
+                  : "No revenue was recovered."}
               </span>
             </div>
           </div>
         )}
 
-        {error && (
-          <div className="vidur-error">
-            {error}
+        {state === "escalated" && agentResult && (
+          <div className="vidur-escalated">
+            <AlertTriangle size={22} />
+
+            <div>
+              <strong>Escalated to human review</strong>
+
+              <span>
+                {agentResult.policy_decision === "DENY"
+                  ? "Policy blocked this intervention."
+                  : "Recovery exhausted — case escalated."}
+              </span>
+
+              {agentResult.candidate_intervention && (
+                <span className="escalated-intervention">
+                  Attempted:{" "}
+                  {agentResult.candidate_intervention
+                    .toLowerCase()
+                    .replaceAll("_", " ")
+                    .replace(/\b\w/g, (l) => l.toUpperCase())}
+                </span>
+              )}
+            </div>
           </div>
         )}
+
+        {error && <div className="vidur-error">{error}</div>}
       </div>
     </article>
-  )
+  );
 }

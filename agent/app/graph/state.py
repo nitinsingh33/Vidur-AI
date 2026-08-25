@@ -23,3 +23,5 @@ class RecoveryAgentState(TypedDict, total=False):
     success: bool | None
 
     attempt: int
+
+    escalation_result: dict[str, Any] | None

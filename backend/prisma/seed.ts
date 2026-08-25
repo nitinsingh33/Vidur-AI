@@ -1,5 +1,9 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
+import type {
+  RecoveryActionType,
+  PolicyAction,
+} from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import fs from "node:fs";
@@ -8,6 +12,27 @@ import path from "node:path";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+interface DefaultPolicy {
+  name: string;
+  description: string;
+  actionType: RecoveryActionType;
+  decision: PolicyAction;
+  maxRetries?: number;
+  maxContacts?: number;
+  maxAmount?: number;
+}
+
+const DEFAULT_POLICIES: DefaultPolicy[] = [
+  { name: "Allow payment retry", description: "Retry failed payments up to 3 times.", actionType: "RETRY_PAYMENT", decision: "ALLOW", maxRetries: 3 },
+  { name: "Allow payment link", description: "Send a payment link up to 3 times.", actionType: "SEND_PAYMENT_LINK", decision: "ALLOW", maxContacts: 3 },
+  { name: "Allow recovery email", description: "Send recovery emails up to 5 times.", actionType: "SEND_EMAIL", decision: "ALLOW", maxContacts: 5 },
+  { name: "Allow WhatsApp reminder", description: "Send WhatsApp reminders up to 3 times.", actionType: "SEND_WHATSAPP", decision: "ALLOW", maxContacts: 3 },
+  { name: "Allow payment method update request", description: "Ask for an updated payment method up to 2 times.", actionType: "UPDATE_PAYMENT_METHOD", decision: "ALLOW", maxContacts: 2 },
+  { name: "Allow receivable follow-up", description: "Follow up on overdue invoices up to 5 times.", actionType: "FOLLOW_UP_RECEIVABLE", decision: "ALLOW", maxContacts: 5 },
+  { name: "Always allow escalation", description: "Escalating to a human is never blocked.", actionType: "ESCALATE_HUMAN", decision: "ALLOW" },
+  { name: "Always allow stop", description: "Stopping recovery is never blocked.", actionType: "STOP_RECOVERY", decision: "ALLOW" },
+];
 
 // Resolves to backend/data/synthetic regardless of execution directory
 const DATA_DIR = path.resolve(__dirname, "../data/synthetic");
@@ -152,33 +177,24 @@ async function main() {
   });
   console.log("Invoices inserted.");
 
-  const recoveryMerchant = merchants.find(
-    (merchant: any) =>
-      merchant.id ===
-      "63e3b518-3828-4d23-bebe-45589dff73ca",
-  );
-
-  if (!recoveryMerchant) {
-    throw new Error(
-      "Target merchant for recovery policy not found.",
-    );
-  }
-
-  await prisma.policy.create({
-    data: {
-      merchantId: recoveryMerchant.id,
-      name: "Allow payment retry",
-      description:
-        "Allow retrying failed payments as part of recovery.",
-      actionType: "RETRY_PAYMENT",
-      decision: "ALLOW",
-      enabled: true,
-      maxRetries: 3,
-    },
+  await prisma.policy.createMany({
+    data: merchants.flatMap((merchant: any) =>
+      DEFAULT_POLICIES.map((policy) => ({
+        merchantId: merchant.id,
+        name: policy.name,
+        description: policy.description,
+        actionType: policy.actionType,
+        decision: policy.decision,
+        maxRetries: policy.maxRetries ?? null,
+        maxContacts: policy.maxContacts ?? null,
+        maxAmount: policy.maxAmount ?? null,
+        enabled: true,
+      })),
+    ),
   });
 
   console.log(
-    `Recovery policy inserted for merchant ${recoveryMerchant.id}.`,
+    `Policies inserted: ${DEFAULT_POLICIES.length} action types x ${merchants.length} merchants.`,
   );
 
   console.log("RecoverAI synthetic database seed completed successfully.");

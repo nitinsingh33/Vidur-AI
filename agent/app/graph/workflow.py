@@ -210,7 +210,31 @@ def recover(
 def escalate(
     state: RecoveryAgentState,
 ) -> RecoveryAgentState:
-    return state
+    recovery_case_id = state["recovery_case_id"]
+
+    outcome = (state.get("execution_result") or {}).get("outcome", {})
+    policy_decision = state.get("policy_decision")
+
+    if policy_decision == "DENY":
+        reason = "Policy denied the intervention."
+    elif outcome.get("shouldStop"):
+        reason = "Retry limit exhausted — escalating to human review."
+    else:
+        reason = "Recovery failed after all attempts."
+
+    response = requests.post(
+        f"{NESTJS_URL}/escalation/cases/{recovery_case_id}",
+        json={"reason": reason},
+        timeout=10,
+    )
+
+    response.raise_for_status()
+
+    return {
+        **state,
+        "escalation_result": response.json(),
+    }
+
 
 
 def build_recovery_graph():

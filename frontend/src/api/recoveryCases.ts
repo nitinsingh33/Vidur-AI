@@ -165,3 +165,25 @@ export async function observeRecovery(
 
   return response.json()
 }
+export interface AgentRecoveryResult {
+  recovery_case_id: string
+  success: boolean | null
+  policy_decision: string | null
+  candidate_intervention: string | null
+}
+
+export async function runAgentRecovery(
+  recoveryCaseId: string,
+): Promise<AgentRecoveryResult> {
+  const response = await fetch('http://localhost:8001/run-recovery', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recovery_case_id: recoveryCaseId }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Agent recovery failed: ${response.status}`)
+  }
+
+  return response.json()
+}

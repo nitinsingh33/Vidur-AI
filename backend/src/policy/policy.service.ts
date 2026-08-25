@@ -41,9 +41,11 @@ export class PolicyService {
       });
 
     if (!policy) {
-      throw new NotFoundException(
-        `No enabled policy found for ${actionType}.`,
-      );
+      return {
+        decision: PolicyAction.BLOCK,
+        policyId: 'NO_POLICY_CONFIGURED',
+        reason: `No policy configured for ${actionType}; blocking by default.`,
+      };
     }
 
     if (

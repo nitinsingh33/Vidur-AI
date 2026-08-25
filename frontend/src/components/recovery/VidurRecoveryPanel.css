@@ -248,3 +248,68 @@
     padding: 18px;
   }
 }
+.vidur-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+}
+
+.vidur-divider::before,
+.vidur-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border, rgba(255,255,255,0.1));
+}
+
+.vidur-secondary-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.vidur-secondary-button:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.vidur-escalated {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+}
+
+.vidur-escalated div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vidur-escalated strong {
+  font-size: 0.95rem;
+}
+
+.vidur-escalated span {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.escalated-intervention {
+  margin-top: 0.25rem;
+  font-size: 0.75rem !important;
+  opacity: 0.6 !important;
+}
