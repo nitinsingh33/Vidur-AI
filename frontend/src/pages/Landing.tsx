@@ -12,6 +12,20 @@ import {
 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 
+const orchestrationNodes = [
+  { key: 'detect', label: 'Detect', icon: CircleDollarSign, top: '22.5%', left: '17.5%' },
+  { key: 'diagnose', label: 'Diagnose', icon: Sparkles, top: '22.5%', left: '82.5%' },
+  { key: 'policy', label: 'Policy', icon: ShieldCheck, top: '77.5%', left: '17.5%' },
+  { key: 'recover', label: 'Recover', icon: Zap, top: '77.5%', left: '82.5%' },
+] as const
+
+const stats = [
+  { value: '3', label: 'Revenue-loss scenarios', tone: 'text-emerald-400' },
+  { value: '5', label: 'Recovery channels', tone: 'text-emerald-400' },
+  { value: '3x', label: 'Max attempts, then escalate', tone: 'text-emerald-400' },
+  { value: '100%', label: 'Decisions audited', tone: 'text-emerald-400' },
+]
+
 const workflow = [
   {
     number: '01',
@@ -71,6 +85,7 @@ export function Landing() {
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-background">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[720px] opacity-40 [background-image:radial-gradient(circle,color-mix(in_oklch,var(--foreground),transparent_82%)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_65%_55%_at_50%_0%,black,transparent)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,color-mix(in_oklch,var(--primary),transparent_78%),transparent)]" />
 
       {/* Navigation */}
@@ -108,27 +123,28 @@ export function Landing() {
       <main className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-6 py-16 lg:grid-cols-2 lg:py-24">
         <div>
           <motion.div
-            className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+            className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary"
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Sparkles size={13} />
-            Agentic revenue recovery
+            Revenue Recovery Platform
           </motion.div>
 
           <motion.h1
-            className="mt-5 text-4xl font-semibold leading-[1.1] tracking-tight text-foreground sm:text-5xl"
+            className="mt-6 font-heading text-[44px] font-medium leading-[1.04] tracking-[-0.02em] text-foreground sm:text-[56px] lg:text-[68px]"
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.08 }}
           >
-            Every failed payment
-            <span className="block text-muted-foreground">deserves a decision.</span>
+            <span className="bg-gradient-to-r from-sky-400 to-primary bg-clip-text text-transparent">
+              Every failed payment
+            </span>
+            <span className="block text-foreground">deserves a decision.</span>
           </motion.h1>
 
           <motion.p
-            className="mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground"
+            className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground"
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.18 }}
@@ -139,12 +155,12 @@ export function Landing() {
           </motion.p>
 
           <motion.div
-            className="mt-8 flex flex-wrap items-center gap-5"
+            className="mt-9 flex flex-wrap items-center gap-5"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.28 }}
           >
-            <Button size="lg" onClick={() => navigate('/signup')}>
+            <Button size="lg" className="h-11 px-6" onClick={() => navigate('/signup')}>
               Explore Vidur AI
               <ArrowRight size={17} />
             </Button>
@@ -169,120 +185,81 @@ export function Landing() {
           </motion.div>
         </div>
 
-        {/* Hero intelligence visual */}
+        {/* Hero orchestration visual */}
         <motion.div
-          className="relative"
+          className="relative mx-auto aspect-square w-full max-w-[440px]"
           initial={{ opacity: 0, x: 45 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.85, delay: 0.2 }}
         >
-          <div className="pointer-events-none absolute -inset-10 -z-10 rounded-full bg-primary/20 blur-[100px]" />
+          <div className="pointer-events-none absolute -inset-10 -z-10 rounded-full bg-primary/15 blur-[110px]" />
 
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-2xl shadow-black/20">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Recovery intelligence
-                </span>
-                <h2 className="mt-1 text-base font-semibold text-foreground">
-                  Agent decision
-                </h2>
-              </div>
+          <div className="absolute inset-0 rounded-[28px] border border-border bg-card/40" />
 
-              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-                <span className="size-1.5 rounded-full bg-emerald-400" />
-                Operational
-              </span>
-            </div>
+          <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full">
+            <path d="M70,90 V170 H166" stroke="var(--border)" strokeWidth="1.5" fill="none" />
+            <path d="M330,90 V170 H234" stroke="var(--border)" strokeWidth="1.5" fill="none" />
+            <path d="M70,310 V230 H166" stroke="var(--border)" strokeWidth="1.5" fill="none" />
+            <path d="M330,310 V230 H234" stroke="var(--border)" strokeWidth="1.5" fill="none" />
+          </svg>
 
-            <div className="mt-5 rounded-xl border border-border bg-secondary/40 p-4">
-              <span className="text-xs text-muted-foreground">Revenue at risk</span>
-              <strong className="mt-1 block text-3xl font-semibold tracking-tight text-foreground">
-                ₹5,388.92
-              </strong>
-              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Recovery case</span>
-                <span className="font-medium text-amber-400">MEDIUM RISK</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border p-3.5">
-                <span className="text-xs text-muted-foreground">Recovery probability</span>
-                <strong className="mt-1 block text-sm font-semibold text-foreground">40%</strong>
-              </div>
-              <div className="rounded-xl border border-border p-3.5">
-                <span className="text-xs text-muted-foreground">Failure reason</span>
-                <strong className="mt-1 block text-sm font-semibold text-foreground">
-                  Insufficient funds
-                </strong>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-secondary/40 p-3.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                <Bot size={16} />
-              </div>
-              <div className="flex-1">
-                <span className="block text-xs text-muted-foreground">
-                  Recommended intervention
-                </span>
-                <strong className="block text-sm font-semibold text-foreground">
-                  Retry payment
-                </strong>
-              </div>
-              <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-400">
-                ALLOW
-              </span>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between px-1">
-              {[Bot, ShieldCheck, Check].map((Icon, index) => (
-                <div key={index} className="flex flex-1 items-center">
-                  <span
-                    className={`flex size-7 items-center justify-center rounded-full ${
-                      index === 0
-                        ? 'bg-primary text-primary-foreground'
-                        : 'border border-border text-muted-foreground'
-                    }`}
-                  >
-                    <Icon size={13} />
-                  </span>
-                  {index < 2 && <span className="h-px flex-1 bg-border" />}
-                </div>
-              ))}
-            </div>
-            <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-              <span>Agent</span>
-              <span>Policy</span>
-              <span>Outcome</span>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-sm">
-              <span className="text-muted-foreground">Policy check</span>
-              <strong className="text-foreground">Passed</strong>
-            </div>
-          </div>
-
+          {/* Center orb */}
           <motion.div
-            className="absolute -top-5 left-10 z-10 hidden items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-lg sm:flex"
-            animate={{ y: [0, -7, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute left-1/2 top-1/2 flex size-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-card"
+            style={{ boxShadow: '0 0 70px -12px var(--primary)' }}
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <Bot size={14} className="text-primary" />
-            Agent active
+            <div className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <Bot size={26} />
+            </div>
           </motion.div>
 
-          <motion.div
-            className="absolute -bottom-5 right-10 z-10 hidden items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-lg sm:flex"
-            animate={{ y: [0, 7, 0] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <ShieldCheck size={14} className="text-emerald-400" />
-            Policy verified
-          </motion.div>
+          {/* Orchestration nodes */}
+          {orchestrationNodes.map((node, index) => (
+            <motion.div
+              key={node.key}
+              className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2"
+              style={{ top: node.top, left: node.left }}
+              animate={{ y: [0, index % 2 === 0 ? -6 : 6, 0] }}
+              transition={{
+                duration: 4 + index * 0.3,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+            >
+              <div className="flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg">
+                <node.icon size={18} />
+              </div>
+              <span className="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground shadow-lg">
+                {node.label}
+              </span>
+            </motion.div>
+          ))}
         </motion.div>
       </main>
+
+      {/* By the numbers */}
+      <section className="relative mx-auto max-w-6xl px-6 pb-20">
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-b from-primary/10 to-transparent p-8 sm:p-10">
+          <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+            By the design
+          </span>
+
+          <div className="mt-7 grid grid-cols-2 gap-8 sm:grid-cols-4">
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <strong className="font-heading text-4xl font-medium tracking-tight text-foreground">
+                  {stat.value}
+                </strong>
+                <p className={`mt-1.5 text-sm font-medium ${stat.tone}`}>
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Value strip */}
       <section id="platform" className="border-y border-border bg-secondary/20">
