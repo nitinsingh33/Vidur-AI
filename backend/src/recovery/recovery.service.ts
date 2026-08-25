@@ -8,6 +8,8 @@ import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
 
 @Injectable()
 export class RecoveryService {
+  private readonly MAX_RECOVERY_ATTEMPTS = 3;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly strategyService: RecoveryStrategyService,
@@ -183,6 +185,17 @@ export class RecoveryService {
       throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
+    if (
+      recoveryCase.status === 'RECOVERED' ||
+      recoveryCase.status === 'STOPPED' ||
+      recoveryCase.status === 'ESCALATED' ||
+      recoveryCase.status === 'EXHAUSTED'
+    ) {
+      throw new NotFoundException(
+        `Recovery case ${recoveryCaseId} is already ${recoveryCase.status}.`,
+      );
+    }
+
     const action = recoveryCase.actions.find(
       (item) => item.status === 'PENDING',
     );
@@ -193,14 +206,33 @@ export class RecoveryService {
       );
     }
 
-    if (action.type !== 'RETRY_PAYMENT') {
-      throw new NotFoundException(
-        `Execution for ${action.type} is not implemented yet.`,
-      );
-    }
-
     if (action.policyDecision !== 'ALLOW') {
       throw new NotFoundException(`Recovery action is not allowed by policy.`);
+    }
+
+    const retryAttempts = recoveryCase.actions.filter(
+      (item) =>
+        item.type === 'RETRY_PAYMENT' &&
+        ['EXECUTING', 'SUCCESS', 'FAILED'].includes(item.status),
+    ).length;
+
+    if (
+      action.type === 'RETRY_PAYMENT' &&
+      retryAttempts >= this.MAX_RECOVERY_ATTEMPTS
+    ) {
+      await this.prisma.recoveryCase.update({
+        where: {
+          id: recoveryCase.id,
+        },
+        data: {
+          status: 'EXHAUSTED',
+          closedAt: new Date(),
+        },
+      });
+
+      throw new NotFoundException(
+        `Recovery retry limit of ${this.MAX_RECOVERY_ATTEMPTS} attempts reached.`,
+      );
     }
 
     if (!recoveryCase.payment) {
@@ -210,7 +242,9 @@ export class RecoveryService {
     }
 
     await this.prisma.recoveryAction.update({
-      where: { id: action.id },
+      where: {
+        id: action.id,
+      },
       data: {
         status: 'EXECUTING',
         attemptedAt: new Date(),
@@ -218,7 +252,9 @@ export class RecoveryService {
     });
 
     await this.prisma.recoveryCase.update({
-      where: { id: recoveryCase.id },
+      where: {
+        id: recoveryCase.id,
+      },
       data: {
         status: 'IN_PROGRESS',
       },
@@ -241,6 +277,22 @@ export class RecoveryService {
           },
         },
       });
+
+      if (!result.successful) {
+        const totalAttempts = retryAttempts + 1;
+
+        if (totalAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+          await this.prisma.recoveryCase.update({
+            where: {
+              id: recoveryCase.id,
+            },
+            data: {
+              status: 'EXHAUSTED',
+              closedAt: new Date(),
+            },
+          });
+        }
+      }
 
       return completedAction;
     } catch (error) {
@@ -286,51 +338,89 @@ export class RecoveryService {
       return recoveryCase.outcome;
     }
 
-    const successfulAction = recoveryCase.actions.find(
-      (action) =>
-        action.type === 'RETRY_PAYMENT' && action.status === 'SUCCESS',
-    );
-
-    if (!successfulAction) {
-      throw new NotFoundException(
-        `No successful recovery action found for case ${recoveryCaseId}.`,
-      );
-    }
-
     if (!recoveryCase.payment) {
       throw new NotFoundException(
         `Recovery case ${recoveryCaseId} has no payment.`,
       );
     }
 
-    if (recoveryCase.payment.status !== 'CAPTURED') {
-      throw new NotFoundException(
-        `Recovery action succeeded but payment ${recoveryCase.payment.id} is not CAPTURED.`,
+    /*
+     * Recovery has succeeded only when the actual payment
+     * is CAPTURED.
+     */
+    if (recoveryCase.payment.status === 'CAPTURED') {
+      const successfulAction = recoveryCase.actions.find(
+        (action) => action.status === 'SUCCESS',
       );
+
+      if (!successfulAction) {
+        throw new NotFoundException(
+          `Payment is captured but no successful recovery action exists for case ${recoveryCaseId}.`,
+        );
+      }
+
+      const recoveredAmount = Number(recoveryCase.payment.amount);
+
+      const outcome = await this.prisma.recoveryOutcome.create({
+        data: {
+          recoveryCaseId: recoveryCase.id,
+          recoveredAmount,
+          successful: true,
+          recoveryMethod: successfulAction.type,
+          recoveredAt: new Date(),
+        },
+      });
+
+      await this.prisma.recoveryCase.update({
+        where: {
+          id: recoveryCase.id,
+        },
+        data: {
+          status: 'RECOVERED',
+          closedAt: new Date(),
+        },
+      });
+
+      return outcome;
     }
 
-    const recoveredAmount = Number(recoveryCase.payment.amount);
+    /*
+     * Payment is still not recovered.
+     * Do not throw here — the agent needs this observation
+     * to decide whether another bounded attempt is possible.
+     */
+    const retryAttempts = recoveryCase.actions.filter(
+      (action) =>
+        action.type === 'RETRY_PAYMENT' &&
+        ['EXECUTING', 'SUCCESS', 'FAILED'].includes(action.status),
+    ).length;
 
-    const outcome = await this.prisma.recoveryOutcome.create({
-      data: {
-        recoveryCaseId: recoveryCase.id,
-        recoveredAmount,
-        successful: true,
-        recoveryMethod: successfulAction.type,
-        recoveredAt: new Date(),
-      },
-    });
+    const attemptsRemaining = Math.max(
+      this.MAX_RECOVERY_ATTEMPTS - retryAttempts,
+      0,
+    );
 
-    await this.prisma.recoveryCase.update({
-      where: {
-        id: recoveryCase.id,
-      },
-      data: {
-        status: 'RECOVERED',
-        closedAt: new Date(),
-      },
-    });
+    if (attemptsRemaining === 0 && recoveryCase.status !== 'EXHAUSTED') {
+      await this.prisma.recoveryCase.update({
+        where: {
+          id: recoveryCase.id,
+        },
+        data: {
+          status: 'EXHAUSTED',
+          closedAt: new Date(),
+        },
+      });
+    }
 
-    return outcome;
+    return {
+      recoveryCaseId: recoveryCase.id,
+      successful: false,
+      paymentStatus: recoveryCase.payment.status,
+      attemptsUsed: retryAttempts,
+      maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+      attemptsRemaining,
+      shouldRetry: attemptsRemaining > 0,
+      shouldStop: attemptsRemaining === 0,
+    };
   }
 }

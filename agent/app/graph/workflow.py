@@ -31,7 +31,6 @@ def analyze_context(
     state: RecoveryAgentState,
 ) -> RecoveryAgentState:
     recovery_case = state["recovery_case"]
-
     payment = recovery_case.get("payment")
 
     return {
@@ -73,11 +72,9 @@ def get_recovery_probability(
 
     features_response.raise_for_status()
 
-    features = features_response.json()
-
     prediction_response = requests.post(
         f"{FASTAPI_URL}/predict-recovery",
-        json=features,
+        json=features_response.json(),
         timeout=10,
     )
 
@@ -91,6 +88,7 @@ def get_recovery_probability(
             prediction["recovery_probability"]
         ),
     }
+
 
 def select_intervention(
     state: RecoveryAgentState,
@@ -134,6 +132,7 @@ def policy_check(
         "policy_decision": policy["decision"],
     }
 
+
 def route_after_policy(
     state: RecoveryAgentState,
 ) -> str:
@@ -142,13 +141,15 @@ def route_after_policy(
 
     return "escalate"
 
+
 def execute(
     state: RecoveryAgentState,
 ) -> RecoveryAgentState:
     recovery_case_id = state["recovery_case_id"]
 
     response = requests.post(
-        f"{NESTJS_URL}/recovery/cases/{recovery_case_id}/execute",
+        f"{NESTJS_URL}/recovery/cases/"
+        f"{recovery_case_id}/execute",
         timeout=10,
     )
 
@@ -157,6 +158,7 @@ def execute(
     return {
         **state,
         "execution_result": response.json(),
+        "attempt": state.get("attempt", 0) + 1,
     }
 
 
@@ -177,12 +179,13 @@ def observe(
 
     return {
         **state,
-        "success": bool(outcome["successful"]),
+        "success": bool(outcome.get("successful")),
         "execution_result": {
             **(state.get("execution_result") or {}),
             "outcome": outcome,
         },
     }
+
 
 def route_after_observe(
     state: RecoveryAgentState,
@@ -190,7 +193,13 @@ def route_after_observe(
     if state.get("success") is True:
         return "recover"
 
+    outcome = state.get("execution_result", {}).get("outcome", {})
+
+    if outcome.get("shouldRetry") is True:
+        return "retry"
+
     return "escalate"
+
 
 def recover(
     state: RecoveryAgentState,
@@ -204,12 +213,17 @@ def escalate(
     return state
 
 
-
 def build_recovery_graph():
     graph = StateGraph(RecoveryAgentState)
 
-    graph.add_node("load_recovery_case", load_recovery_case)
-    graph.add_node("analyze_context", analyze_context)
+    graph.add_node(
+        "load_recovery_case",
+        load_recovery_case,
+    )
+    graph.add_node(
+        "analyze_context",
+        analyze_context,
+    )
     graph.add_node(
         "get_recovery_probability",
         get_recovery_probability,
@@ -218,53 +232,84 @@ def build_recovery_graph():
         "select_intervention",
         select_intervention,
     )
-    graph.add_node("policy_check", policy_check)
-    graph.add_node("execute", execute)
-    graph.add_node("observe", observe)
-    
-    graph.add_node("recover", recover)
-    graph.add_node("escalate", escalate)
+    graph.add_node(
+        "policy_check",
+        policy_check,
+    )
+    graph.add_node(
+        "execute",
+        execute,
+    )
+    graph.add_node(
+        "observe",
+        observe,
+    )
+    graph.add_node(
+        "recover",
+        recover,
+    )
+    graph.add_node(
+        "escalate",
+        escalate,
+    )
 
+    graph.add_edge(
+        START,
+        "load_recovery_case",
+    )
 
-    graph.add_edge(START,"load_recovery_case")
     graph.add_edge(
         "load_recovery_case",
         "analyze_context",
     )
+
     graph.add_edge(
         "analyze_context",
         "get_recovery_probability",
     )
+
     graph.add_edge(
         "get_recovery_probability",
         "select_intervention",
     )
+
     graph.add_edge(
         "select_intervention",
         "policy_check",
     )
+
     graph.add_conditional_edges(
-    "policy_check",
-    route_after_policy,
-    {
-        "execute": "execute",
-        "escalate": "escalate",
-    },
-)
+        "policy_check",
+        route_after_policy,
+        {
+            "execute": "execute",
+            "escalate": "escalate",
+        },
+    )
+
     graph.add_edge(
         "execute",
         "observe",
     )
+
     graph.add_conditional_edges(
         "observe",
         route_after_observe,
         {
             "recover": "recover",
+            "retry": "select_intervention",
             "escalate": "escalate",
         },
     )
 
-    graph.add_edge("recover", END)
-    graph.add_edge("escalate", END)
+    graph.add_edge(
+        "recover",
+        END,
+    )
+
+    graph.add_edge(
+        "escalate",
+        END,
+    )
 
     return graph.compile()

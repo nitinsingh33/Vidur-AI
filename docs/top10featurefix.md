@@ -401,3 +401,6 @@ tree /F frontend\src
 Then send the **backend recovery files + `agent/workflow.py` + agent tool files** listed above.
 
 **Don't start changing code yet.** Once I have those, I will first reconstruct the exact existing Feature #1 flow and tell you precisely which files we need to modify/add.
+
+
+Feature-1 implemented - 28/8/26
