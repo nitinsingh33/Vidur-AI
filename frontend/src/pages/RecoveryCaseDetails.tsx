@@ -1,61 +1,32 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Clock3, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Clock3, Sparkles, XCircle } from 'lucide-react'
 import {
   getRecoveryCase,
   type RecoveryCase,
 } from '../api/recoveryCases'
 import { VidurRecoveryPanel } from '../components/recovery/VidurRecoveryPanel'
-import './RecoveryCaseDetails.css'
-
-interface RecoveryCaseDetailsProps {}
-
-function formatAmount(
-  amount: string,
-  currency = 'INR',
-) {
-  return `${currency === 'INR' ? '₹' : currency} ${Number(
-    amount,
-  ).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function formatLabel(value: string | null) {
-  if (!value) return '—'
-
-  return value
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase(),
-    )
-}
+import { StatusBadge } from '../components/ui/status-badge'
+import { Skeleton } from '../components/ui/skeleton'
+import {
+  actionStatusTone,
+  caseStatusTone,
+  formatAmount,
+  formatLabel,
+  policyTone,
+  riskTone,
+} from '../lib/status'
 
 function getActionIcon(status: string) {
-  if (status === 'SUCCESS') {
-    return <CheckCircle2 size={16} />
-  }
-
-  if (status === 'FAILED') {
-    return <XCircle size={16} />
-  }
-
+  if (status === 'SUCCESS') return <CheckCircle2 size={16} />
+  if (status === 'FAILED') return <XCircle size={16} />
   return <Clock3 size={16} />
 }
 
-export function RecoveryCaseDetails(
-  _props: RecoveryCaseDetailsProps,
-) {
-  const { recoveryCaseId } = useParams<{
-    recoveryCaseId: string
-  }>()
-
+export function RecoveryCaseDetails() {
+  const { recoveryCaseId } = useParams<{ recoveryCaseId: string }>()
   const navigate = useNavigate()
-  const [recoveryCase, setRecoveryCase] =
-    useState<RecoveryCase | null>(null)
-
+  const [recoveryCase, setRecoveryCase] = useState<RecoveryCase | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,21 +35,13 @@ export function RecoveryCaseDetails(
       try {
         setLoading(true)
         setError(null)
+        if (!recoveryCaseId) return
 
-        if (!recoveryCaseId) {
-          return
-        }
-
-        const data = await getRecoveryCase(
-          recoveryCaseId,
-        )
-
+        const data = await getRecoveryCase(recoveryCaseId)
         setRecoveryCase(data)
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : 'Unable to load recovery case.',
+          err instanceof Error ? err.message : 'Unable to load recovery case.',
         )
       } finally {
         setLoading(false)
@@ -90,9 +53,13 @@ export function RecoveryCaseDetails(
 
   if (loading) {
     return (
-      <section className="case-details-page">
-        <div className="case-details-state">
-          Loading recovery case...
+      <section className="mx-auto max-w-5xl pb-12">
+        <Skeleton className="mb-6 h-5 w-40" />
+        <Skeleton className="mb-3 h-9 w-72" />
+        <div className="mt-6 grid grid-cols-3 gap-4">
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
         </div>
       </section>
     )
@@ -100,17 +67,17 @@ export function RecoveryCaseDetails(
 
   if (error || !recoveryCase) {
     return (
-      <section className="case-details-page">
+      <section className="mx-auto max-w-5xl pb-12">
         <button
-          className="back-button"
           type="button"
           onClick={() => navigate('/recovery-cases')}
+          className="mb-7 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft size={17} />
+          <ArrowLeft size={16} />
           Back to recovery cases
         </button>
 
-        <div className="case-details-state error">
+        <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-6 text-sm text-destructive">
           {error ?? 'Recovery case not found.'}
         </div>
       </section>
@@ -122,268 +89,236 @@ export function RecoveryCaseDetails(
   )
 
   return (
-    <section className="case-details-page">
+    <section className="mx-auto max-w-5xl pb-12">
       <button
-        className="back-button"
         type="button"
         onClick={() => navigate('/recovery-cases')}
+        className="mb-7 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft size={17} />
+        <ArrowLeft size={16} />
         Back to recovery cases
       </button>
 
-      <div className="case-header">
+      <div className="flex items-start justify-between gap-6">
         <div>
-          <p className="eyebrow">Recovery case</p>
-
-          <h1>Case details</h1>
-
-          <p className="case-id">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+            Recovery case
+          </p>
+          <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground">
+            Case details
+          </h1>
+          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
             {recoveryCase.id}
           </p>
         </div>
 
-        <div className="case-header-status">
-          <span
-            className={`status-pill status-${recoveryCase.status.toLowerCase()}`}
-          >
-            {formatLabel(recoveryCase.status)}
-          </span>
-
-          <span
-            className={`status-pill risk-${recoveryCase.riskLevel.toLowerCase()}`}
-          >
-            {formatLabel(recoveryCase.riskLevel)} risk
-          </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <StatusBadge label={recoveryCase.status} tone={caseStatusTone(recoveryCase.status)} />
+          <StatusBadge
+            label={`${formatLabel(recoveryCase.riskLevel)} risk`}
+            tone={riskTone(recoveryCase.riskLevel)}
+          />
         </div>
       </div>
 
-      <div className="case-overview-grid">
-        <article className="case-highlight">
-          <span>Revenue at risk</span>
-
-          <strong>
-            {formatAmount(
-              recoveryCase.revenueAtRisk,
-            )}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <article className="rounded-xl border border-border bg-card p-5">
+          <span className="text-xs text-muted-foreground">Revenue at risk</span>
+          <strong className="mt-2 block text-2xl font-semibold text-foreground">
+            {formatAmount(recoveryCase.revenueAtRisk)}
           </strong>
         </article>
 
-        <article className="case-highlight">
-          <span>Recovery probability</span>
-
-          <strong>{probability}%</strong>
+        <article className="rounded-xl border border-border bg-card p-5">
+          <span className="text-xs text-muted-foreground">Recovery probability</span>
+          <strong className="mt-2 block text-2xl font-semibold text-foreground">
+            {probability}%
+          </strong>
         </article>
 
-        <article className="case-highlight">
-          <span>Root cause</span>
-
-          <strong>
+        <article className="rounded-xl border border-border bg-card p-5">
+          <span className="text-xs text-muted-foreground">Root cause</span>
+          <strong className="mt-2 block text-2xl font-semibold text-foreground">
             {formatLabel(recoveryCase.rootCause)}
           </strong>
         </article>
       </div>
 
       {recoveryCase.aiReasoning && (
-        <article className="details-card">
-          <div className="details-card-heading">
+        <article className="mt-5 rounded-xl border border-primary/20 bg-primary/5 p-6">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Sparkles size={14} />
+            </div>
             <div>
-              <p className="section-eyebrow">Vidur AI</p>
-
-              <h2>AI reasoning</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Vidur AI
+              </p>
+              <h2 className="text-sm font-semibold text-foreground">
+                AI reasoning
+              </h2>
             </div>
           </div>
-
-          <p>{recoveryCase.aiReasoning}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {recoveryCase.aiReasoning}
+          </p>
         </article>
       )}
 
       <VidurRecoveryPanel
         recoveryCaseId={recoveryCase.id}
-        onCompleted={() => {
-          window.location.reload()
-        }}
+        onCompleted={() => window.location.reload()}
       />
 
-      <div className="case-details-grid">
-        <article className="details-card">
-          <div className="details-card-heading">
-            <div>
-              <p className="section-eyebrow">
-                Customer
-              </p>
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <article className="rounded-xl border border-border bg-card p-6">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Customer
+          </p>
+          <h2 className="mt-1 mb-4 text-base font-semibold text-foreground">
+            Customer information
+          </h2>
 
-              <h2>Customer information</h2>
-            </div>
-          </div>
-
-          <div className="detail-list">
-            <div>
-              <span>Name</span>
-              <strong>
+          <dl className="space-y-3">
+            <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+              <dt className="text-xs text-muted-foreground">Name</dt>
+              <dd className="text-sm font-medium text-foreground">
                 {recoveryCase.customer.name}
-              </strong>
+              </dd>
             </div>
-
-            <div>
-              <span>Email</span>
-              <strong>
+            <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+              <dt className="text-xs text-muted-foreground">Email</dt>
+              <dd className="text-sm font-medium text-foreground">
                 {recoveryCase.customer.email}
-              </strong>
+              </dd>
             </div>
-
             {recoveryCase.customer.phone && (
-              <div>
-                <span>Phone</span>
-                <strong>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-xs text-muted-foreground">Phone</dt>
+                <dd className="text-sm font-medium text-foreground">
                   {recoveryCase.customer.phone}
-                </strong>
+                </dd>
               </div>
             )}
-          </div>
+          </dl>
         </article>
 
-        <article className="details-card">
-          <div className="details-card-heading">
-            <div>
-              <p className="section-eyebrow">
-                Payment
-              </p>
-
-              <h2>Payment information</h2>
-            </div>
-          </div>
+        <article className="rounded-xl border border-border bg-card p-6">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Payment
+          </p>
+          <h2 className="mt-1 mb-4 text-base font-semibold text-foreground">
+            Payment information
+          </h2>
 
           {recoveryCase.payment ? (
-            <div className="detail-list">
-              <div>
-                <span>Amount</span>
-                <strong>
-                  {formatAmount(
-                    recoveryCase.payment.amount,
-                    recoveryCase.payment.currency,
-                  )}
-                </strong>
+            <dl className="space-y-3">
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+                <dt className="text-xs text-muted-foreground">Amount</dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatAmount(recoveryCase.payment.amount, recoveryCase.payment.currency)}
+                </dd>
               </div>
-
-              <div>
-                <span>Method</span>
-                <strong>
-                  {formatLabel(
-                    recoveryCase.payment.method,
-                  )}
-                </strong>
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+                <dt className="text-xs text-muted-foreground">Method</dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.payment.method)}
+                </dd>
               </div>
-
-              <div>
-                <span>Status</span>
-                <strong>
-                  {formatLabel(
-                    recoveryCase.payment.status,
-                  )}
-                </strong>
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+                <dt className="text-xs text-muted-foreground">Status</dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.payment.status)}
+                </dd>
               </div>
-
-              <div>
-                <span>Failure reason</span>
-                <strong>
-                  {formatLabel(
-                    recoveryCase.payment
-                      .failureReason,
-                  )}
-                </strong>
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+                <dt className="text-xs text-muted-foreground">Failure reason</dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.payment.failureReason)}
+                </dd>
               </div>
-
-              <div>
-                <span>Attempt</span>
-                <strong>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-xs text-muted-foreground">Attempt</dt>
+                <dd className="text-sm font-medium text-foreground">
                   #{recoveryCase.payment.attemptNumber}
-                </strong>
+                </dd>
               </div>
-            </div>
+            </dl>
           ) : (
-            <p className="empty-detail">
+            <p className="text-sm text-muted-foreground">
               No payment information available.
             </p>
           )}
         </article>
       </div>
 
-      <article className="details-card">
-        <div className="details-card-heading">
-          <div>
-            <p className="section-eyebrow">
-              Agent activity
-            </p>
-
-            <h2>Recovery timeline</h2>
-          </div>
-        </div>
+      <article className="mt-4 rounded-xl border border-border bg-card p-6">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Agent activity
+        </p>
+        <h2 className="mt-1 mb-5 text-base font-semibold text-foreground">
+          Recovery timeline
+        </h2>
 
         {recoveryCase.actions.length > 0 ? (
-          <div className="action-timeline">
-            {recoveryCase.actions.map((action) => (
-              <div
-                className="timeline-item"
-                key={action.id}
-              >
-                <div className="timeline-icon">
+          <div className="space-y-0">
+            {recoveryCase.actions.map((action, index) => (
+              <div key={action.id} className="relative flex gap-3.5 pb-6 last:pb-0">
+                {index < recoveryCase.actions.length - 1 && (
+                  <span className="absolute left-4 top-8 bottom-0 w-px bg-border" />
+                )}
+
+                <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
                   {getActionIcon(action.status)}
                 </div>
 
-                <div className="timeline-content">
-                  <div className="timeline-main">
-                    <strong>
+                <div className="min-w-0 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <strong className="text-sm font-semibold text-foreground">
                       {formatLabel(action.type)}
                     </strong>
-
-                    <span
-                      className={`status-pill status-${action.status.toLowerCase()}`}
-                    >
-                      {formatLabel(action.status)}
-                    </span>
+                    <StatusBadge label={action.status} tone={actionStatusTone(action.status)} />
                   </div>
 
                   {action.reason && (
-                    <p>{action.reason}</p>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      {action.reason}
+                    </p>
                   )}
 
                   {action.policyDecision && (
-                    <span className="policy-result">
-                      Policy: {formatLabel(
-                        action.policyDecision,
-                      )}
-                    </span>
+                    <StatusBadge
+                      className="mt-2"
+                      label={`Policy: ${formatLabel(action.policyDecision)}`}
+                      tone={policyTone(action.policyDecision)}
+                    />
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="empty-detail">
+          <p className="text-sm text-muted-foreground">
             No recovery actions recorded yet.
           </p>
         )}
       </article>
 
       {recoveryCase.outcome && (
-        <article className="outcome-card">
+        <article className="mt-4 flex items-center justify-between gap-6 rounded-xl border border-border bg-card p-6">
           <div>
-            <p className="section-eyebrow">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Recovery outcome
             </p>
-
-            <h2>
+            <h2 className="mt-1 text-base font-semibold text-foreground">
               {recoveryCase.outcome.successful
                 ? 'Revenue recovered'
                 : 'Recovery unsuccessful'}
             </h2>
           </div>
 
-          <strong>
-            {formatAmount(
-              recoveryCase.outcome.recoveredAmount,
-            )}
+          <strong className="text-2xl font-semibold text-foreground">
+            {formatAmount(recoveryCase.outcome.recoveredAmount)}
           </strong>
         </article>
       )}

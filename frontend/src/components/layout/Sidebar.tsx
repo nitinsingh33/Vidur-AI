@@ -1,4 +1,3 @@
-import './Sidebar.css'
 import {
   Activity,
   BarChart3,
@@ -9,33 +8,14 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { cn } from '../../lib/utils'
 
 const navigation = [
-  {
-    label: 'Overview',
-    icon: LayoutDashboard,
-    path: '/dashboard',
-  },
-  {
-    label: 'Recovery Cases',
-    icon: Activity,
-    path: '/recovery-cases',
-  },
-  {
-    label: 'Batches',
-    icon: Layers,
-    path: '/batches',
-  },
-  {
-    label: 'Agent Activity',
-    icon: Bot,
-    path: '/agent-activity',
-  },
-  {
-    label: 'Analytics',
-    icon: BarChart3,
-    path: '/analytics',
-  },
+  { label: 'Overview', icon: LayoutDashboard, path: '/dashboard' },
+  { label: 'Recovery Cases', icon: Activity, path: '/recovery-cases' },
+  { label: 'Batches', icon: Layers, path: '/batches' },
+  { label: 'Agent Activity', icon: Bot, path: '/agent-activity' },
+  { label: 'Analytics', icon: BarChart3, path: '/analytics' },
 ]
 
 export function Sidebar() {
@@ -43,73 +23,82 @@ export function Sidebar() {
   const location = useLocation()
 
   return (
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="brand-mark">V</div>
-
-        <div>
-          <div className="brand-name">Vidur AI</div>
-          <div className="brand-caption">
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6 md:flex">
+      <a
+        href="/"
+        className="mb-8 flex items-center gap-2.5 px-2"
+      >
+        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
+          V
+        </div>
+        <div className="leading-tight">
+          <div className="text-sm font-semibold text-sidebar-foreground">
+            Vidur AI
+          </div>
+          <div className="text-[11px] text-muted-foreground">
             Revenue Recovery
           </div>
         </div>
+      </a>
+
+      <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Workspace
       </div>
 
-      <nav className="sidebar-nav">
-        <div className="nav-section-label">
-          Workspace
-        </div>
-
+      <nav className="flex flex-1 flex-col gap-0.5">
         {navigation.map((item) => {
-          const Icon = item.icon
-
           const active =
-            item.path === '/'
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.path)
+            location.pathname === item.path ||
+            (item.path !== '/' && location.pathname.startsWith(item.path))
 
           return (
             <button
               key={item.label}
-              className={`nav-item ${active ? 'active' : ''}`}
               type="button"
               onClick={() => navigate(item.path)}
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors',
+                active
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+              )}
             >
-              <Icon size={18} strokeWidth={1.8} />
-              <span>{item.label}</span>
+              <item.icon size={17} strokeWidth={1.8} />
+              {item.label}
             </button>
           )
         })}
       </nav>
 
-      <div className="sidebar-bottom">
+      <div className="mt-4 flex flex-col gap-0.5 border-t border-sidebar-border pt-4">
         <button
-          className="nav-item"
           type="button"
           onClick={() => navigate('/policies')}
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
         >
-          <ShieldCheck size={18} strokeWidth={1.8} />
-          <span>Policies</span>
+          <ShieldCheck size={17} strokeWidth={1.8} />
+          Policies
         </button>
 
         <button
-          className="nav-item"
           type="button"
           onClick={() => navigate('/settings')}
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
         >
-          <Settings size={18} strokeWidth={1.8} />
-          <span>Settings</span>
+          <Settings size={17} strokeWidth={1.8} />
+          Settings
         </button>
 
-        <div className="agent-status">
-          <span className="status-dot" />
-
-          <div>
-            <div className="status-title">
+        <div className="mt-3 flex items-center gap-2.5 rounded-lg bg-sidebar-accent/50 px-3 py-2.5">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+          </span>
+          <div className="leading-tight">
+            <div className="text-xs font-medium text-sidebar-foreground">
               Agent operational
             </div>
-
-            <div className="status-subtitle">
+            <div className="text-[11px] text-muted-foreground">
               All systems running
             </div>
           </div>

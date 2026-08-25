@@ -8,21 +8,11 @@ import {
   runBatch,
   type RecoveryBatchStatus,
 } from '../api/recoveryBatches'
-import './RecoveryBatches.css'
-
-function formatAmount(amount: number) {
-  return `₹${amount.toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function formatLabel(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { StatusBadge } from '../components/ui/status-badge'
+import { batchStatusTone, formatAmount, formatLabel, caseStatusTone } from '../lib/status'
 
 export function RecoveryBatches() {
   const navigate = useNavigate()
@@ -45,10 +35,7 @@ export function RecoveryBatches() {
       try {
         const data = await getMerchants()
         setMerchants(data)
-
-        if (data.length > 0) {
-          setSelectedMerchantId(data[0].id)
-        }
+        if (data.length > 0) setSelectedMerchantId(data[0].id)
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Unable to load merchants.',
@@ -67,7 +54,6 @@ export function RecoveryBatches() {
         clearInterval(pollRef.current)
         pollRef.current = null
       }
-
       return
     }
 
@@ -94,14 +80,10 @@ export function RecoveryBatches() {
     try {
       setError(null)
       setDetecting(true)
-
       const result = await detectBatch(selectedMerchantId, limitPerType)
-
       setBatch(result)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Batch detection failed.',
-      )
+      setError(err instanceof Error ? err.message : 'Batch detection failed.')
     } finally {
       setDetecting(false)
     }
@@ -113,9 +95,7 @@ export function RecoveryBatches() {
     try {
       setError(null)
       setRunning(true)
-
       await runBatch(batch.batchId)
-
       const updated = await getBatchStatus(batch.batchId)
       setBatch(updated)
     } catch (err) {
@@ -128,33 +108,32 @@ export function RecoveryBatches() {
   const statusEntries = batch ? Object.entries(batch.byStatus) : []
 
   return (
-    <section className="batches-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Batch orchestration</p>
-
-          <h1>Recovery Batches</h1>
-
-          <p className="page-description">
-            Detect a batch of revenue-at-risk cases for one merchant across
-            failed payments, checkout abandonment and overdue receivables,
-            then run the agent across all of them and watch measured
-            recovery come in.
-          </p>
-        </div>
+    <section className="pb-12">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+          Batch orchestration
+        </p>
+        <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground">
+          Recovery Batches
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
+          Detect a batch of revenue-at-risk cases for one merchant across
+          failed payments, checkout abandonment and overdue receivables,
+          then run the agent across all of them and watch measured recovery
+          come in.
+        </p>
       </div>
 
-      <article className="batch-control-card">
-        <div className="batch-control-row">
-          <label className="batch-field">
-            <span>Merchant</span>
-
+      <article className="mt-6 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[220px] flex-1 space-y-1.5">
+            <Label htmlFor="merchant">Merchant</Label>
             <select
+              id="merchant"
               value={selectedMerchantId}
-              onChange={(event) =>
-                setSelectedMerchantId(event.target.value)
-              }
+              onChange={(event) => setSelectedMerchantId(event.target.value)}
               disabled={loadingMerchants || merchants.length === 0}
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
             >
               {merchants.map((merchant) => (
                 <option key={merchant.id} value={merchant.id}>
@@ -162,144 +141,139 @@ export function RecoveryBatches() {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
 
-          <label className="batch-field batch-field-narrow">
-            <span>Cases per scenario</span>
-
-            <input
+          <div className="w-40 space-y-1.5">
+            <Label htmlFor="limitPerType">Cases per scenario</Label>
+            <Input
+              id="limitPerType"
               type="number"
               min={1}
               max={50}
               value={limitPerType}
-              onChange={(event) =>
-                setLimitPerType(Number(event.target.value))
-              }
+              onChange={(event) => setLimitPerType(Number(event.target.value))}
             />
-          </label>
+          </div>
 
-          <button
-            className="batch-primary-button"
-            type="button"
+          <Button
             onClick={handleDetect}
             disabled={detecting || loadingMerchants || !selectedMerchantId}
           >
             {detecting ? (
-              <Loader2 size={16} className="spin" />
+              <Loader2 size={16} className="animate-spin" />
             ) : (
               <Search size={16} />
             )}
             Detect Batch
-          </button>
+          </Button>
         </div>
       </article>
 
-      {error && <div className="batches-state error">{error}</div>}
+      {error && (
+        <div className="mt-5 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {batch && (
         <>
-          <article className="batch-overview-card">
-            <div className="batch-overview-heading">
+          <article className="mt-5 rounded-xl border border-border bg-card p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p className="section-eyebrow">Batch</p>
-                <h2>{batch.batchId}</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Batch
+                </p>
+                <h2 className="mt-1 break-all font-mono text-sm text-foreground">
+                  {batch.batchId}
+                </h2>
               </div>
 
-              <span
-                className={`status-pill batch-status-${batch.status.toLowerCase()}`}
-              >
-                {formatLabel(batch.status)}
-              </span>
+              <StatusBadge label={batch.status} tone={batchStatusTone(batch.status)} />
             </div>
 
-            <div className="batch-metrics-grid">
-              <div className="batch-metric">
-                <span>Total cases</span>
-                <strong>{batch.totalCases}</strong>
+            <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+              <div className="rounded-lg border border-border bg-secondary/40 p-4">
+                <span className="block text-xs text-muted-foreground">Total cases</span>
+                <strong className="mt-1.5 block text-lg font-semibold text-foreground">
+                  {batch.totalCases}
+                </strong>
               </div>
-
-              <div className="batch-metric">
-                <span>Revenue at risk</span>
-                <strong>{formatAmount(batch.revenueAtRisk)}</strong>
+              <div className="rounded-lg border border-border bg-secondary/40 p-4">
+                <span className="block text-xs text-muted-foreground">Revenue at risk</span>
+                <strong className="mt-1.5 block text-lg font-semibold text-foreground">
+                  {formatAmount(batch.revenueAtRisk)}
+                </strong>
               </div>
-
-              <div className="batch-metric">
-                <span>Revenue recovered</span>
-                <strong>{formatAmount(batch.revenueRecovered)}</strong>
+              <div className="rounded-lg border border-border bg-secondary/40 p-4">
+                <span className="block text-xs text-muted-foreground">Revenue recovered</span>
+                <strong className="mt-1.5 block text-lg font-semibold text-foreground">
+                  {formatAmount(batch.revenueRecovered)}
+                </strong>
               </div>
-
-              <div className="batch-metric">
-                <span>Recovery rate</span>
-                <strong>
+              <div className="rounded-lg border border-border bg-secondary/40 p-4">
+                <span className="block text-xs text-muted-foreground">Recovery rate</span>
+                <strong className="mt-1.5 block text-lg font-semibold text-foreground">
                   {Math.round(batch.recoveryRate * 100)}%
                 </strong>
               </div>
             </div>
 
             {statusEntries.length > 0 && (
-              <div className="batch-status-breakdown">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {statusEntries.map(([status, count]) => (
-                  <span
+                  <StatusBadge
                     key={status}
-                    className={`status-pill status-${status.toLowerCase()}`}
-                  >
-                    {formatLabel(status)}: {count}
-                  </span>
+                    label={`${formatLabel(status)}: ${count}`}
+                    tone={caseStatusTone(status)}
+                  />
                 ))}
               </div>
             )}
 
-            {batch.status === 'DETECTED' && (
-              <button
-                className="batch-primary-button"
-                type="button"
-                onClick={handleRun}
-                disabled={running || batch.totalCases === 0}
-              >
-                {running ? (
-                  <Loader2 size={16} className="spin" />
-                ) : (
-                  <Play size={16} />
-                )}
-                Run Batch
-              </button>
-            )}
+            <div className="mt-5">
+              {batch.status === 'DETECTED' && (
+                <Button onClick={handleRun} disabled={running || batch.totalCases === 0}>
+                  {running ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Play size={16} />
+                  )}
+                  Run Batch
+                </Button>
+              )}
 
-            {batch.status === 'RUNNING' && !batch.isComplete && (
-              <div className="batch-running-indicator">
-                <Loader2 size={16} className="spin" />
-                <span>
-                  Agent is working through the batch — updating every few
-                  seconds...
-                </span>
-              </div>
-            )}
-
-            {batch.isComplete && (
-              <div className="batch-complete-banner">
-                <Layers size={20} />
-
-                <div>
-                  <strong>Batch complete</strong>
-
-                  <span>
-                    {batch.recoveredCases} of {batch.totalCases} cases
-                    recovered — {formatAmount(batch.revenueRecovered)}{' '}
-                    recovered of {formatAmount(batch.revenueAtRisk)} at
-                    risk.
-                  </span>
+              {batch.status === 'RUNNING' && !batch.isComplete && (
+                <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                  <Loader2 size={16} className="animate-spin" />
+                  Agent is working through the batch — updating every few seconds...
                 </div>
-              </div>
-            )}
+              )}
+
+              {batch.isComplete && (
+                <div className="flex items-start gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-4 text-emerald-400">
+                  <Layers size={20} className="mt-0.5 shrink-0" />
+                  <div>
+                    <strong className="block text-sm font-semibold">
+                      Batch complete
+                    </strong>
+                    <span className="mt-1 block text-xs opacity-90">
+                      {batch.recoveredCases} of {batch.totalCases} cases recovered —{' '}
+                      {formatAmount(batch.revenueRecovered)} recovered of{' '}
+                      {formatAmount(batch.revenueAtRisk)} at risk.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </article>
 
-          <button
-            className="batch-secondary-button"
-            type="button"
+          <Button
+            variant="outline"
+            className="mt-4"
             onClick={() => navigate('/recovery-cases')}
           >
             View recovery cases
-          </button>
+          </Button>
         </>
       )}
     </section>

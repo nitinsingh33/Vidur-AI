@@ -1,32 +1,10 @@
-import './RecoveryCasesTable.css'
 import type { RecoveryCase } from '../../api/recoveryCases'
+import { StatusBadge } from '../ui/status-badge'
+import { caseStatusTone, riskTone, formatAmount, formatLabel } from '../../lib/status'
 
 interface RecoveryCasesTableProps {
   cases: RecoveryCase[]
-  onOpenRecoveryCase: (
-    recoveryCaseId: string,
-  ) => void
-}
-
-function formatAmount(
-  amount: string,
-  currency: string,
-) {
-  return `${currency === 'INR' ? '₹' : currency} ${Number(
-    amount,
-  ).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function formatLabel(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase(),
-    )
+  onOpenRecoveryCase: (recoveryCaseId: string) => void
 }
 
 function getLatestAction(recoveryCase: RecoveryCase) {
@@ -38,131 +16,116 @@ export function RecoveryCasesTable({
   onOpenRecoveryCase,
 }: RecoveryCasesTableProps) {
   return (
-    <section className="recovery-section">
-      <div className="section-heading">
-        <div>
-          <p className="section-eyebrow">
-            Recovery operations
-          </p>
-
-          <h2>Recent recovery cases</h2>
-
-          <p>
-            Monitor cases that require automated or human
-            intervention.
-          </p>
-        </div>
+    <section className="rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-5 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Recovery operations
+        </p>
+        <h2 className="mt-1 text-base font-semibold text-foreground">
+          Recent recovery cases
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Monitor cases that require automated or human intervention.
+        </p>
       </div>
 
-      <div className="recovery-table-wrapper">
-        <table className="recovery-table">
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Payment</th>
-              <th>At risk</th>
-              <th>Probability</th>
-              <th>Risk</th>
-              <th>Status</th>
-              <th>Latest action</th>
-            </tr>
-          </thead>
+      {cases.length === 0 ? (
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+          No recovery cases yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-5 py-3 font-medium">Customer</th>
+                <th className="px-3 py-3 font-medium">Payment</th>
+                <th className="px-3 py-3 font-medium">At risk</th>
+                <th className="px-3 py-3 font-medium">Probability</th>
+                <th className="px-3 py-3 font-medium">Risk</th>
+                <th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 font-medium">Latest action</th>
+              </tr>
+            </thead>
 
-          <tbody>
-            {cases.map((recoveryCase) => {
-              const latestAction =
-                getLatestAction(recoveryCase)
+            <tbody>
+              {cases.map((recoveryCase) => {
+                const latestAction = getLatestAction(recoveryCase)
 
-              return (
-                <tr 
-                  key={recoveryCase.id}
-                  onClick={() =>
-                    onOpenRecoveryCase(recoveryCase.id)
-                  }
-                  className="recovery-row"
-                >
-                  <td>
-                    <div className="customer-cell">
-                      <strong>
-                        {recoveryCase.customer.name}
-                      </strong>
-
-                      <span>
-                        {recoveryCase.customer.email}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td>
-                    {recoveryCase.payment
-                      ? formatAmount(
-                          recoveryCase.payment.amount,
-                          recoveryCase.payment.currency,
-                        )
-                      : '—'}
-                  </td>
-
-                  <td>
-                    {formatAmount(
-                      recoveryCase.revenueAtRisk,
-                      'INR',
-                    )}
-                  </td>
-
-                  <td>
-                    {Math.round(
-                      Number(
-                        recoveryCase.recoveryProbability,
-                      ) * 100,
-                    )}
-                    %
-                  </td>
-
-                  <td>
-                    <span
-                      className={`status-pill risk-${recoveryCase.riskLevel.toLowerCase()}`}
-                    >
-                      {formatLabel(
-                        recoveryCase.riskLevel,
-                      )}
-                    </span>
-                  </td>
-
-                  <td>
-                    <span
-                      className={`status-pill status-${recoveryCase.status.toLowerCase()}`}
-                    >
-                      {formatLabel(
-                        recoveryCase.status,
-                      )}
-                    </span>
-                  </td>
-
-                  <td>
-                    {latestAction ? (
-                      <div className="action-cell">
-                        <strong>
-                          {formatLabel(
-                            latestAction.type,
-                          )}
-                        </strong>
-
-                        <span>
-                          {formatLabel(
-                            latestAction.status,
-                          )}
+                return (
+                  <tr
+                    key={recoveryCase.id}
+                    onClick={() => onOpenRecoveryCase(recoveryCase.id)}
+                    className="cursor-pointer border-b border-border/70 transition-colors last:border-0 hover:bg-secondary/40"
+                  >
+                    <td className="px-5 py-3.5">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {recoveryCase.customer.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {recoveryCase.customer.email}
                         </span>
                       </div>
-                    ) : (
-                      'No action'
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+
+                    <td className="px-3 py-3.5 text-muted-foreground">
+                      {recoveryCase.payment
+                        ? formatAmount(
+                            recoveryCase.payment.amount,
+                            recoveryCase.payment.currency,
+                          )
+                        : '—'}
+                    </td>
+
+                    <td className="px-3 py-3.5 text-muted-foreground">
+                      {formatAmount(recoveryCase.revenueAtRisk, 'INR')}
+                    </td>
+
+                    <td className="px-3 py-3.5 text-muted-foreground">
+                      {Math.round(
+                        Number(recoveryCase.recoveryProbability) * 100,
+                      )}
+                      %
+                    </td>
+
+                    <td className="px-3 py-3.5">
+                      <StatusBadge
+                        label={recoveryCase.riskLevel}
+                        tone={riskTone(recoveryCase.riskLevel)}
+                      />
+                    </td>
+
+                    <td className="px-3 py-3.5">
+                      <StatusBadge
+                        label={recoveryCase.status}
+                        tone={caseStatusTone(recoveryCase.status)}
+                      />
+                    </td>
+
+                    <td className="px-3 py-3.5">
+                      {latestAction ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">
+                            {formatLabel(latestAction.type)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatLabel(latestAction.status)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          No action
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   )
 }
