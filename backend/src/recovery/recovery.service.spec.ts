@@ -2,6 +2,9 @@ import { RecoveryActionType } from '../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryService } from './recovery.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
+import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
+import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
+import { AuditService } from '../audit/audit.service';
 
 describe('RecoveryService', () => {
   let service: RecoveryService;
@@ -16,12 +19,27 @@ describe('RecoveryService', () => {
     },
   } as unknown as PrismaService;
 
+  const syntheticPaymentService = {
+    attemptRecovery: jest.fn(),
+  } as unknown as SyntheticPaymentService;
+
+  const syntheticInvoiceService = {
+    attemptRecovery: jest.fn(),
+  } as unknown as SyntheticInvoiceService;
+
+  const auditService = {
+    record: jest.fn(),
+  } as unknown as AuditService;
+
   beforeEach(() => {
     jest.clearAllMocks();
 
     service = new RecoveryService(
       prisma,
       new RecoveryStrategyService(),
+      syntheticPaymentService,
+      syntheticInvoiceService,
+      auditService,
     );
   });
 
@@ -31,7 +49,7 @@ describe('RecoveryService', () => {
       expectedAction: RecoveryActionType.RETRY_PAYMENT,
     },
     {
-      rootCause: 'EXPIRED_CARD',
+      rootCause: 'CARD_EXPIRED',
       expectedAction:
         RecoveryActionType.UPDATE_PAYMENT_METHOD,
     },

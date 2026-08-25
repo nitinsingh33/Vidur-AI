@@ -23,12 +23,34 @@ export class RecoveryStrategyService {
             'Payment failed because of insufficient funds. Retry the payment later.',
         };
 
-      case 'expired_card':
+      case 'network_error':
+        return {
+          actionType: RecoveryActionType.RETRY_PAYMENT,
+          reason:
+            'Payment failed because of a transient network error. Retry the payment.',
+        };
+
+      case 'card_expired':
         return {
           actionType:
             RecoveryActionType.UPDATE_PAYMENT_METHOD,
           reason:
             'The payment method appears to be expired. Request a payment method update.',
+        };
+
+      case 'bank_declined':
+        return {
+          actionType:
+            RecoveryActionType.UPDATE_PAYMENT_METHOD,
+          reason:
+            'The issuing bank declined the payment. Request a different payment method.',
+        };
+
+      case 'limit_exceeded':
+        return {
+          actionType: RecoveryActionType.SEND_PAYMENT_LINK,
+          reason:
+            'The payment method limit was exceeded. Send a payment link so the customer can pay another way.',
         };
 
       case 'checkout_abandoned':

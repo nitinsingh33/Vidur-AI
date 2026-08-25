@@ -55,6 +55,7 @@ class RecoveryWorkflowResponse(BaseModel):
     success: bool | None
     policy_decision: str | None
     candidate_intervention: str | None
+    ai_reasoning: str | None
 
 
 app = FastAPI(
@@ -117,4 +118,5 @@ def run_recovery(
         candidate_intervention=result.get(
             "candidate_intervention"
         ),
+        ai_reasoning=result.get("ai_reasoning"),
     )

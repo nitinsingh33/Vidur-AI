@@ -16,6 +16,8 @@ class RecoveryAgentState(TypedDict, total=False):
 
     candidate_intervention: str | None
 
+    ai_reasoning: str | None
+
     policy_decision: str | None
 
     execution_result: dict[str, Any] | None

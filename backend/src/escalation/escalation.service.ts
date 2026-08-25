@@ -9,11 +9,13 @@ import {
 } from '../generated/prisma/enums';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class EscalationService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async escalateRecoveryCase(
@@ -65,16 +67,14 @@ export class EscalationService {
       },
     });
 
-    await this.prisma.auditLog.create({
-      data: {
-        merchantId: recoveryCase.merchantId,
-        recoveryCaseId,
-        action: 'RECOVERY_ESCALATED',
-        actorType: 'AGENT',
-        details: {
-          reason,
-          actionId: action.id,
-        },
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId,
+      action: 'RECOVERY_ESCALATED',
+      actorType: 'AGENT',
+      details: {
+        reason,
+        actionId: action.id,
       },
     });
 

@@ -40,6 +40,7 @@ export interface RecoveryCase {
   revenueAtRisk: string
   recoveryProbability: string
   rootCause: string | null
+  aiReasoning?: string | null
 
   customer: {
     id: string

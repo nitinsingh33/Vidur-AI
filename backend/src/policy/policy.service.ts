@@ -9,6 +9,7 @@ import {
 } from '../generated/prisma/enums';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 export interface PolicyCheckResult {
   decision: PolicyAction;
@@ -20,6 +21,7 @@ export interface PolicyCheckResult {
 export class PolicyService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async check(
@@ -137,6 +139,19 @@ if (action) {
     },
   });
 }
+
+await this.auditService.record({
+  merchantId: recoveryCase.merchantId,
+  recoveryCaseId,
+  action: 'POLICY_EVALUATED',
+  actorType: 'AGENT',
+  details: {
+    actionType,
+    decision: result.decision,
+    policyId: result.policyId,
+    reason: result.reason,
+  },
+});
 
 return result;
 }

@@ -16,11 +16,35 @@ describe('RecoveryStrategyService', () => {
     );
   });
 
-  it('should request payment method update for expired card', () => {
-    const result = service.determine('expired_card');
+  it('should request payment method update for an expired card', () => {
+    const result = service.determine('card_expired');
 
     expect(result.actionType).toBe(
       RecoveryActionType.UPDATE_PAYMENT_METHOD,
+    );
+  });
+
+  it('should request payment method update for a bank decline', () => {
+    const result = service.determine('bank_declined');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.UPDATE_PAYMENT_METHOD,
+    );
+  });
+
+  it('should retry payment for a transient network error', () => {
+    const result = service.determine('network_error');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.RETRY_PAYMENT,
+    );
+  });
+
+  it('should send payment link when the payment limit was exceeded', () => {
+    const result = service.determine('limit_exceeded');
+
+    expect(result.actionType).toBe(
+      RecoveryActionType.SEND_PAYMENT_LINK,
     );
   });
 

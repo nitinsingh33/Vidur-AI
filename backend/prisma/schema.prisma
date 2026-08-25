@@ -110,6 +110,12 @@ enum PolicyAction {
   REQUIRE_APPROVAL
 }
 
+enum RecoveryBatchStatus {
+  DETECTED
+  RUNNING
+  COMPLETED
+}
+
 model Merchant {
   id        String   @id @default(uuid())
   name      String
@@ -118,15 +124,16 @@ model Merchant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         MerchantUser[]
-  customers     Customer[]
-  orders        Order[]
-  payments      Payment[]
-  subscriptions Subscription[]
-  invoices      Invoice[]
-  recoveryCases RecoveryCase[]
-  policies      Policy[]
-  auditLogs     AuditLog[]
+  users          MerchantUser[]
+  customers      Customer[]
+  orders         Order[]
+  payments       Payment[]
+  subscriptions  Subscription[]
+  invoices       Invoice[]
+  recoveryCases  RecoveryCase[]
+  recoveryBatches RecoveryBatch[]
+  policies       Policy[]
+  auditLogs      AuditLog[]
 }
 
 model MerchantUser {
@@ -179,6 +186,7 @@ model Order {
   merchant Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   payments Payment[]
+  recoveryCases RecoveryCase[]
 
   @@index([merchantId])
   @@index([customerId])
@@ -276,20 +284,25 @@ model RecoveryCase {
   customerId          String?
   paymentId           String?
   invoiceId           String?
+  orderId             String?
+  batchId             String?
   status              RecoveryCaseStatus @default(OPEN)
   riskLevel           RiskLevel?
   revenueAtRisk       Decimal            @db.Decimal(18, 2)
   recoveryProbability Decimal?           @db.Decimal(5, 4)
   rootCause           String?
+  aiReasoning         String?
   openedAt            DateTime           @default(now())
   closedAt            DateTime?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  merchant Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  payment  Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  invoice  Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  merchant Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  payment  Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  invoice  Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  order    Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  batch    RecoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   actions   RecoveryAction[]
   outcome   RecoveryOutcome?
@@ -297,9 +310,27 @@ model RecoveryCase {
 
   @@index([merchantId])
   @@index([customerId])
+  @@index([batchId])
   @@index([paymentId])
+  @@index([orderId])
   @@index([status])
   @@index([riskLevel])
+}
+
+model RecoveryBatch {
+  id          String              @id @default(uuid())
+  merchantId  String
+  status      RecoveryBatchStatus @default(DETECTED)
+  totalCases  Int
+  createdAt   DateTime            @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  merchant Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  cases    RecoveryCase[]
+
+  @@index([merchantId])
+  @@index([status])
 }
 
 model RecoveryAction {

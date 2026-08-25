@@ -46,6 +46,7 @@ export class RecoveryCasesService {
           customer: true,
           payment: true,
           invoice: true,
+          order: true,
           actions: {
             orderBy: {
               createdAt: 'desc',
@@ -90,6 +91,8 @@ export class RecoveryCasesService {
         },
 
         invoice: true,
+
+        order: true,
 
         actions: {
           orderBy: {

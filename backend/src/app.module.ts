@@ -15,12 +15,15 @@ import { NotificationModule } from './notification/notification.module';
 import { EscalationModule } from './escalation/escalation.module';
 import { BullModule } from '@nestjs/bullmq';
 import { RecoveryQueueModule } from './recovery-queue/recovery-queue.module';
+import { AuditModule } from './audit/audit.module';
+import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.module';
 
 
 @Module({
   imports: [
     PrismaModule,
-    
+    AuditModule,
+
     BullModule.forRoot({
       connection: {
         host: 'localhost',
@@ -40,6 +43,7 @@ import { RecoveryQueueModule } from './recovery-queue/recovery-queue.module';
     NotificationModule,
     EscalationModule,
     RecoveryQueueModule,
+    RecoveryBatchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -19,4 +19,20 @@ export class RiskController {
   ) {
     return this.riskService.assessPayment(paymentId);
   }
+
+  @Post('assess-order/:orderId')
+  assessOrderAbandonment(
+    @Param('orderId', new ParseUUIDPipe())
+    orderId: string,
+  ) {
+    return this.riskService.assessOrderAbandonment(orderId);
+  }
+
+  @Post('assess-invoice/:invoiceId')
+  assessInvoiceOverdue(
+    @Param('invoiceId', new ParseUUIDPipe())
+    invoiceId: string,
+  ) {
+    return this.riskService.assessInvoiceOverdue(invoiceId);
+  }
 }

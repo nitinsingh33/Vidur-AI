@@ -5,6 +5,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
 import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
+import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class RecoveryService {
@@ -14,6 +16,8 @@ export class RecoveryService {
     private readonly prisma: PrismaService,
     private readonly strategyService: RecoveryStrategyService,
     private readonly syntheticPaymentService: SyntheticPaymentService,
+    private readonly syntheticInvoiceService: SyntheticInvoiceService,
+    private readonly auditService: AuditService,
   ) {}
 
   async getCaseById(recoveryCaseId: string) {
@@ -29,6 +33,7 @@ export class RecoveryService {
           },
         },
         invoice: true,
+        order: true,
         actions: true,
         outcome: true,
       },
@@ -37,6 +42,28 @@ export class RecoveryService {
     if (!recoveryCase) {
       throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
+
+    return recoveryCase;
+  }
+
+  /**
+   * Persists the LLM's narration of a case the deterministic strategy
+   * service already decided on. Additive only — this never influences
+   * which action gets taken, only explains it.
+   */
+  async recordDiagnosis(recoveryCaseId: string, reasoning: string) {
+    const recoveryCase = await this.prisma.recoveryCase.update({
+      where: { id: recoveryCaseId },
+      data: { aiReasoning: reasoning },
+    });
+
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'AI_DIAGNOSIS_GENERATED',
+      actorType: 'AGENT',
+      details: { reasoning },
+    });
 
     return recoveryCase;
   }
@@ -100,7 +127,9 @@ export class RecoveryService {
     if (!payment) {
       return {
         amount: Number(recoveryCase.revenueAtRisk),
-        failure_reason: 'CHECKOUT_ABANDONED',
+        failure_reason: recoveryCase.invoiceId
+          ? 'INVOICE_OVERDUE'
+          : 'CHECKOUT_ABANDONED',
         payment_method: 'NONE',
         customer_history: historicalPayments.length,
         previous_failures: previousFailures,
@@ -158,7 +187,7 @@ export class RecoveryService {
       return existingAction;
     }
 
-    return this.prisma.recoveryAction.create({
+    const action = await this.prisma.recoveryAction.create({
       data: {
         recoveryCaseId: recoveryCase.id,
         type: strategy.actionType,
@@ -166,6 +195,21 @@ export class RecoveryService {
         reason: strategy.reason,
       },
     });
+
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'STRATEGY_SELECTED',
+      actorType: 'AGENT',
+      details: {
+        actionId: action.id,
+        actionType: strategy.actionType,
+        rootCause: recoveryCase.rootCause,
+        reason: strategy.reason,
+      },
+    });
+
+    return action;
   }
 
   async executeRecoveryAction(recoveryCaseId: string) {
@@ -210,16 +254,19 @@ export class RecoveryService {
       throw new NotFoundException(`Recovery action is not allowed by policy.`);
     }
 
-    const retryAttempts = recoveryCase.actions.filter(
+    if (action.type === 'ESCALATE_HUMAN' || action.type === 'STOP_RECOVERY') {
+      throw new NotFoundException(
+        `${action.type} must be completed via the escalation endpoint, not /execute.`,
+      );
+    }
+
+    const attemptsForAction = recoveryCase.actions.filter(
       (item) =>
-        item.type === 'RETRY_PAYMENT' &&
+        item.type === action.type &&
         ['EXECUTING', 'SUCCESS', 'FAILED'].includes(item.status),
     ).length;
 
-    if (
-      action.type === 'RETRY_PAYMENT' &&
-      retryAttempts >= this.MAX_RECOVERY_ATTEMPTS
-    ) {
+    if (attemptsForAction >= this.MAX_RECOVERY_ATTEMPTS) {
       await this.prisma.recoveryCase.update({
         where: {
           id: recoveryCase.id,
@@ -230,14 +277,30 @@ export class RecoveryService {
         },
       });
 
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_ACTION_BLOCKED',
+        actorType: 'AGENT',
+        details: {
+          actionId: action.id,
+          actionType: action.type,
+          reason: `Attempt limit of ${this.MAX_RECOVERY_ATTEMPTS} reached.`,
+        },
+      });
+
       throw new NotFoundException(
-        `Recovery retry limit of ${this.MAX_RECOVERY_ATTEMPTS} attempts reached.`,
+        `Recovery attempt limit of ${this.MAX_RECOVERY_ATTEMPTS} reached for ${action.type}.`,
       );
     }
 
-    if (!recoveryCase.payment) {
+    if (
+      !recoveryCase.payment &&
+      !recoveryCase.orderId &&
+      !recoveryCase.invoiceId
+    ) {
       throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} has no payment.`,
+        `Recovery case ${recoveryCaseId} has nothing to execute against.`,
       );
     }
 
@@ -261,9 +324,26 @@ export class RecoveryService {
     });
 
     try {
-      const result = await this.syntheticPaymentService.retry(
-        recoveryCase.payment.id,
-      );
+      /*
+       * Three case shapes, one action loop: a payment failure is retried
+       * on the Payment itself; checkout abandonment has no Payment yet
+       * (recovery creates one); an overdue invoice is resolved on the
+       * Invoice directly. See SyntheticPaymentService / SyntheticInvoiceService.
+       */
+      const result = recoveryCase.payment
+        ? await this.syntheticPaymentService.attemptRecovery(
+            recoveryCase.payment.id,
+            action.type,
+          )
+        : recoveryCase.orderId
+          ? await this.syntheticPaymentService.attemptCheckoutRecovery(
+              recoveryCase.orderId,
+              action.type,
+            )
+          : await this.syntheticInvoiceService.attemptRecovery(
+              recoveryCase.invoiceId as string,
+              action.type,
+            );
 
       const completedAction = await this.prisma.recoveryAction.update({
         where: {
@@ -278,8 +358,10 @@ export class RecoveryService {
         },
       });
 
+      let caseStatus: string = 'IN_PROGRESS';
+
       if (!result.successful) {
-        const totalAttempts = retryAttempts + 1;
+        const totalAttempts = attemptsForAction + 1;
 
         if (totalAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
           await this.prisma.recoveryCase.update({
@@ -291,8 +373,25 @@ export class RecoveryService {
               closedAt: new Date(),
             },
           });
+
+          caseStatus = 'EXHAUSTED';
         }
       }
+
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_ACTION_EXECUTED',
+        actorType: 'AGENT',
+        details: {
+          actionId: action.id,
+          actionType: action.type,
+          successful: result.successful,
+          recoveredAmount: result.recoveredAmount,
+          reason: result.reason,
+          caseStatus,
+        },
+      });
 
       return completedAction;
     } catch (error) {
@@ -321,6 +420,7 @@ export class RecoveryService {
       },
       include: {
         payment: true,
+        invoice: true,
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -338,28 +438,53 @@ export class RecoveryService {
       return recoveryCase.outcome;
     }
 
-    if (!recoveryCase.payment) {
+    if (
+      !recoveryCase.payment &&
+      !recoveryCase.orderId &&
+      !recoveryCase.invoiceId
+    ) {
       throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} has no payment.`,
+        `Recovery case ${recoveryCaseId} has nothing to observe.`,
       );
     }
 
     /*
-     * Recovery has succeeded only when the actual payment
-     * is CAPTURED.
+     * Same three case shapes as executeRecoveryAction: a payment case is
+     * recovered once its Payment is CAPTURED; a checkout-abandonment case
+     * is recovered once a Payment now exists (created for the first time
+     * on success) and is CAPTURED; an invoice case is recovered once the
+     * Invoice itself is PAID.
      */
-    if (recoveryCase.payment.status === 'CAPTURED') {
+    const orderPayment = recoveryCase.orderId
+      ? await this.prisma.payment.findFirst({
+          where: { orderId: recoveryCase.orderId, status: 'CAPTURED' },
+        })
+      : null;
+
+    const recoveredPayment = recoveryCase.payment?.status === 'CAPTURED'
+      ? recoveryCase.payment
+      : orderPayment;
+
+    const invoiceRecovered = recoveryCase.invoice?.status === 'PAID';
+
+    const currentStatus = recoveredPayment
+      ? recoveredPayment.status
+      : recoveryCase.invoice?.status ?? recoveryCase.payment?.status ?? 'PENDING';
+
+    if (recoveredPayment || invoiceRecovered) {
       const successfulAction = recoveryCase.actions.find(
         (action) => action.status === 'SUCCESS',
       );
 
       if (!successfulAction) {
         throw new NotFoundException(
-          `Payment is captured but no successful recovery action exists for case ${recoveryCaseId}.`,
+          `Case is recovered but no successful recovery action exists for case ${recoveryCaseId}.`,
         );
       }
 
-      const recoveredAmount = Number(recoveryCase.payment.amount);
+      const recoveredAmount = recoveredPayment
+        ? Number(recoveredPayment.amount)
+        : Number(recoveryCase.invoice?.amount ?? 0);
 
       const outcome = await this.prisma.recoveryOutcome.create({
         data: {
@@ -381,6 +506,17 @@ export class RecoveryService {
         },
       });
 
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_SUCCEEDED',
+        actorType: 'AGENT',
+        details: {
+          recoveredAmount,
+          recoveryMethod: successfulAction.type,
+        },
+      });
+
       return outcome;
     }
 
@@ -389,14 +525,25 @@ export class RecoveryService {
      * Do not throw here — the agent needs this observation
      * to decide whether another bounded attempt is possible.
      */
-    const retryAttempts = recoveryCase.actions.filter(
-      (action) =>
-        action.type === 'RETRY_PAYMENT' &&
-        ['EXECUTING', 'SUCCESS', 'FAILED'].includes(action.status),
-    ).length;
+    /*
+     * Bound attempts per action type, not just RETRY_PAYMENT — once
+     * other channels can genuinely fail (see SyntheticPaymentService),
+     * a strategy that keeps failing must still converge to a stop.
+     */
+    const lastAttemptedAction = recoveryCase.actions.find((action) =>
+      ['EXECUTING', 'SUCCESS', 'FAILED'].includes(action.status),
+    );
+
+    const attemptsUsed = lastAttemptedAction
+      ? recoveryCase.actions.filter(
+          (action) =>
+            action.type === lastAttemptedAction.type &&
+            ['EXECUTING', 'SUCCESS', 'FAILED'].includes(action.status),
+        ).length
+      : 0;
 
     const attemptsRemaining = Math.max(
-      this.MAX_RECOVERY_ATTEMPTS - retryAttempts,
+      this.MAX_RECOVERY_ATTEMPTS - attemptsUsed,
       0,
     );
 
@@ -410,13 +557,37 @@ export class RecoveryService {
           closedAt: new Date(),
         },
       });
+
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_EXHAUSTED',
+        actorType: 'AGENT',
+        details: {
+          attemptsUsed,
+          maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+          paymentStatus: currentStatus,
+        },
+      });
+    } else {
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_ATTEMPT_OBSERVED',
+        actorType: 'AGENT',
+        details: {
+          attemptsUsed,
+          attemptsRemaining,
+          paymentStatus: currentStatus,
+        },
+      });
     }
 
     return {
       recoveryCaseId: recoveryCase.id,
       successful: false,
-      paymentStatus: recoveryCase.payment.status,
-      attemptsUsed: retryAttempts,
+      paymentStatus: currentStatus,
+      attemptsUsed,
       maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
       attemptsRemaining,
       shouldRetry: attemptsRemaining > 0,

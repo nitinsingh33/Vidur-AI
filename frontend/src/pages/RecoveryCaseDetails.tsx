@@ -184,6 +184,20 @@ export function RecoveryCaseDetails(
         </article>
       </div>
 
+      {recoveryCase.aiReasoning && (
+        <article className="details-card">
+          <div className="details-card-heading">
+            <div>
+              <p className="section-eyebrow">Vidur AI</p>
+
+              <h2>AI reasoning</h2>
+            </div>
+          </div>
+
+          <p>{recoveryCase.aiReasoning}</p>
+        </article>
+      )}
+
       <VidurRecoveryPanel
         recoveryCaseId={recoveryCase.id}
         onCompleted={() => {

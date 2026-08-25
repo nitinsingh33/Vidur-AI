@@ -2,11 +2,13 @@ import requests
 
 from langgraph.graph import END, START, StateGraph
 
+from .. import config
+from ..llm.diagnosis import generate_diagnosis
 from .state import RecoveryAgentState
 
 
-FASTAPI_URL = "http://localhost:8001"
-NESTJS_URL = "http://localhost:3000"
+FASTAPI_URL = config.ML_SERVICE_URL
+NESTJS_URL = config.BACKEND_URL
 
 
 def load_recovery_case(
@@ -108,6 +110,47 @@ def select_intervention(
     return {
         **state,
         "candidate_intervention": strategy["type"],
+    }
+
+
+def diagnose_case(
+    state: RecoveryAgentState,
+) -> RecoveryAgentState:
+    """
+    Narrates why this case is at risk and why the already-chosen
+    intervention makes sense. The LLM explains a decision the deterministic
+    strategy service already made — it never makes the decision itself,
+    so a bad or missing Gemini key degrades gracefully, never blocks
+    recovery, and never gets a say in what happens to the money.
+    """
+    reasoning = generate_diagnosis(
+        {
+            "root_cause": state.get("root_cause"),
+            "payment_amount": state.get("payment_amount"),
+            "payment_method": state.get("payment_method"),
+            "failure_reason": state.get("failure_reason"),
+            "retry_count": state.get("retry_count"),
+            "recovery_probability": state.get("recovery_probability"),
+            "candidate_intervention": state.get("candidate_intervention"),
+        }
+    )
+
+    if reasoning:
+        recovery_case_id = state["recovery_case_id"]
+
+        try:
+            requests.post(
+                f"{NESTJS_URL}/recovery/cases/"
+                f"{recovery_case_id}/diagnosis",
+                json={"reasoning": reasoning},
+                timeout=10,
+            )
+        except requests.RequestException as error:
+            print(f"[llm] failed to persist diagnosis: {error}")
+
+    return {
+        **state,
+        "ai_reasoning": reasoning,
     }
 
 
@@ -257,6 +300,10 @@ def build_recovery_graph():
         select_intervention,
     )
     graph.add_node(
+        "diagnose_case",
+        diagnose_case,
+    )
+    graph.add_node(
         "policy_check",
         policy_check,
     )
@@ -299,6 +346,11 @@ def build_recovery_graph():
 
     graph.add_edge(
         "select_intervention",
+        "diagnose_case",
+    )
+
+    graph.add_edge(
+        "diagnose_case",
         "policy_check",
     )
 

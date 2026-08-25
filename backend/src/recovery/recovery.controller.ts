@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -37,6 +38,24 @@ export class RecoveryController {
   ) {
     return this.recoveryService.getMlFeatures(
       recoveryCaseId,
+    );
+  }
+
+  @Post('cases/:recoveryCaseId/diagnosis')
+  recordDiagnosis(
+    @Param(
+      'recoveryCaseId',
+      new ParseUUIDPipe(),
+    )
+    recoveryCaseId: string,
+    @Body()
+    body: {
+      reasoning: string;
+    },
+  ) {
+    return this.recoveryService.recordDiagnosis(
+      recoveryCaseId,
+      body.reasoning,
     );
   }
 

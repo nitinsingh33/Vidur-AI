@@ -6,3 +6,5 @@ joblib
 langgraph
 langchain-core
 requests
+python-dotenv
+google-genai
