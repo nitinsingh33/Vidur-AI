@@ -1,67 +1,60 @@
 // RecoveryService is Database Orchestration
 
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
+import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
 
 @Injectable()
 export class RecoveryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly strategyService: RecoveryStrategyService,
+    private readonly syntheticPaymentService: SyntheticPaymentService,
   ) {}
 
   async getCaseById(recoveryCaseId: string) {
-    const recoveryCase =
-      await this.prisma.recoveryCase.findUnique({
-        where: {
-          id: recoveryCaseId,
-        },
-        include: {
-          customer: true,
-          payment: {
-            include: {
-              events: true,
-            },
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: {
+        id: recoveryCaseId,
+      },
+      include: {
+        customer: true,
+        payment: {
+          include: {
+            events: true,
           },
-          invoice: true,
-          actions: true,
-          outcome: true,
         },
-      });
+        invoice: true,
+        actions: true,
+        outcome: true,
+      },
+    });
 
     if (!recoveryCase) {
-      throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} not found.`,
-      );
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
     return recoveryCase;
   }
 
   async getMlFeatures(recoveryCaseId: string) {
-    const recoveryCase =
-      await this.prisma.recoveryCase.findUnique({
-        where: {
-          id: recoveryCaseId,
-        },
-        include: {
-          payment: {
-            include: {
-              events: true,
-            },
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: {
+        id: recoveryCaseId,
+      },
+      include: {
+        payment: {
+          include: {
+            events: true,
           },
         },
-      });
+      },
+    });
 
     if (!recoveryCase) {
-      throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} not found.`,
-      );
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
     const customerId = recoveryCase.customerId;
@@ -72,43 +65,33 @@ export class RecoveryService {
       );
     }
 
-    const historicalPayments =
-      await this.prisma.payment.findMany({
-        where: {
-          customerId,
-          ...(recoveryCase.paymentId && {
-            id: {
-              not: recoveryCase.paymentId,
-            },
-          }),
-        },
-        select: {
-          id: true,
-          amount: true,
-          status: true,
-        },
-      });
+    const historicalPayments = await this.prisma.payment.findMany({
+      where: {
+        customerId,
+        ...(recoveryCase.paymentId && {
+          id: {
+            not: recoveryCase.paymentId,
+          },
+        }),
+      },
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+      },
+    });
 
-    const previousSuccesses =
-      historicalPayments.filter(
-        (payment) => payment.status === 'CAPTURED',
-      ).length;
+    const previousSuccesses = historicalPayments.filter(
+      (payment) => payment.status === 'CAPTURED',
+    ).length;
 
-    const previousFailures =
-      historicalPayments.filter(
-        (payment) => payment.status === 'FAILED',
-      ).length;
+    const previousFailures = historicalPayments.filter(
+      (payment) => payment.status === 'FAILED',
+    ).length;
 
-    const customerValue =
-      historicalPayments
-        .filter(
-          (payment) => payment.status === 'CAPTURED',
-        )
-        .reduce(
-          (total, payment) =>
-            total + Number(payment.amount),
-          0,
-        );
+    const customerValue = historicalPayments
+      .filter((payment) => payment.status === 'CAPTURED')
+      .reduce((total, payment) => total + Number(payment.amount), 0);
 
     const payment = recoveryCase.payment;
 
@@ -120,72 +103,54 @@ export class RecoveryService {
         customer_history: historicalPayments.length,
         previous_failures: previousFailures,
         previous_successes: previousSuccesses,
-        customer_value: Number(
-          customerValue.toFixed(2),
-        ),
+        customer_value: Number(customerValue.toFixed(2)),
         retry_count: 0,
         retry_failed_events: 0,
       };
     }
 
-    const retryFailedEvents =
-      payment.events.filter(
-        (event) => event.type === 'RETRY_FAILED',
-      ).length;
+    const retryFailedEvents = payment.events.filter(
+      (event) => event.type === 'RETRY_FAILED',
+    ).length;
 
     return {
       amount: Number(payment.amount),
-      failure_reason:
-        payment.failureReason ?? 'NONE',
+      failure_reason: payment.failureReason ?? 'NONE',
       payment_method: payment.method,
       customer_history: historicalPayments.length,
       previous_failures: previousFailures,
       previous_successes: previousSuccesses,
-      customer_value: Number(
-        customerValue.toFixed(2),
-      ),
+      customer_value: Number(customerValue.toFixed(2)),
       retry_count: payment.attemptNumber,
       retry_failed_events: retryFailedEvents,
     };
   }
 
-  async createStrategyForCase(
-    recoveryCaseId: string,
-  ) {
-    const recoveryCase =
-      await this.prisma.recoveryCase.findUnique({
-        where: {
-          id: recoveryCaseId,
-        },
-      });
+  async createStrategyForCase(recoveryCaseId: string) {
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: {
+        id: recoveryCaseId,
+      },
+    });
 
     if (!recoveryCase) {
-      throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} not found.`,
-      );
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
-    const strategy = this.strategyService.determine(
-      recoveryCase.rootCause,
-    );
+    const strategy = this.strategyService.determine(recoveryCase.rootCause);
 
-    const existingAction =
-      await this.prisma.recoveryAction.findFirst({
-        where: {
-          recoveryCaseId: recoveryCase.id,
-          type: strategy.actionType,
-          status: {
-            in: [
-              'PENDING',
-              'APPROVED',
-              'EXECUTING',
-            ],
-          },
+    const existingAction = await this.prisma.recoveryAction.findFirst({
+      where: {
+        recoveryCaseId: recoveryCase.id,
+        type: strategy.actionType,
+        status: {
+          in: ['PENDING', 'APPROVED', 'EXECUTING'],
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
     if (existingAction) {
       return existingAction;
@@ -201,28 +166,21 @@ export class RecoveryService {
     });
   }
 
-  async executeRecoveryAction(
-    recoveryCaseId: string,
-  ) {
-    const recoveryCase =
-      await this.prisma.recoveryCase.findUnique({
-        where: {
-          id: recoveryCaseId,
-        },
-        include: {
-          payment: true,
-          actions: {
-            orderBy: {
-              createdAt: 'desc',
-            },
+  async executeRecoveryAction(recoveryCaseId: string) {
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: { id: recoveryCaseId },
+      include: {
+        payment: true,
+        actions: {
+          orderBy: {
+            createdAt: 'desc',
           },
         },
-      });
+      },
+    });
 
     if (!recoveryCase) {
-      throw new NotFoundException(
-        `Recovery case ${recoveryCaseId} not found.`,
-      );
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
     const action = recoveryCase.actions.find(
@@ -242,22 +200,8 @@ export class RecoveryService {
     }
 
     if (action.policyDecision !== 'ALLOW') {
-      throw new NotFoundException(
-        `Recovery action is not allowed by policy.`,
-      );
+      throw new NotFoundException(`Recovery action is not allowed by policy.`);
     }
-
-    const now = new Date();
-
-    await this.prisma.recoveryAction.update({
-      where: {
-        id: action.id,
-      },
-      data: {
-        status: 'EXECUTING',
-        attemptedAt: now,
-      },
-    });
 
     if (!recoveryCase.payment) {
       throw new NotFoundException(
@@ -265,48 +209,61 @@ export class RecoveryService {
       );
     }
 
-    await this.prisma.paymentEvent.create({
+    await this.prisma.recoveryAction.update({
+      where: { id: action.id },
       data: {
-        paymentId: recoveryCase.payment.id,
-        type: 'RETRY_STARTED',
-        reason:
-          'Recovery retry execution started.',
+        status: 'EXECUTING',
+        attemptedAt: new Date(),
       },
     });
 
-    const completedAt = new Date();
+    await this.prisma.recoveryCase.update({
+      where: { id: recoveryCase.id },
+      data: {
+        status: 'IN_PROGRESS',
+      },
+    });
 
-    const completedAction =
+    try {
+      const result = await this.syntheticPaymentService.retry(
+        recoveryCase.payment.id,
+      );
+
+      const completedAction = await this.prisma.recoveryAction.update({
+        where: {
+          id: action.id,
+        },
+        data: {
+          status: result.successful ? 'SUCCESS' : 'FAILED',
+          completedAt: new Date(),
+          result: {
+            ...result,
+          },
+        },
+      });
+
+      return completedAction;
+    } catch (error) {
       await this.prisma.recoveryAction.update({
         where: {
           id: action.id,
         },
         data: {
-          status: 'SUCCESS',
-          completedAt,
+          status: 'FAILED',
+          completedAt: new Date(),
           result: {
-            successful: true,
-            message:
-              'Synthetic payment retry succeeded.',
+            successful: false,
+            error: error instanceof Error ? error.message : 'Execution failed.',
           },
         },
       });
 
-    await this.prisma.paymentEvent.create({
-      data: {
-        paymentId: recoveryCase.payment.id,
-        type: 'RETRY_SUCCEEDED',
-        reason:
-          'Synthetic payment retry succeeded.',
-      },
-    });
-
-    return completedAction;
+      throw error;
+    }
   }
 
   async observeRecovery(recoveryCaseId: string) {
-  const recoveryCase =
-    await this.prisma.recoveryCase.findUnique({
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id: recoveryCaseId,
       },
@@ -321,38 +278,40 @@ export class RecoveryService {
       },
     });
 
-  if (!recoveryCase) {
-    throw new NotFoundException(
-      `Recovery case ${recoveryCaseId} not found.`,
-    );
-  }
+    if (!recoveryCase) {
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
+    }
 
-  if (recoveryCase.outcome) {
-    return recoveryCase.outcome;
-  }
+    if (recoveryCase.outcome) {
+      return recoveryCase.outcome;
+    }
 
-  const successfulAction =
-    recoveryCase.actions.find(
-      (action) => action.status === 'SUCCESS',
+    const successfulAction = recoveryCase.actions.find(
+      (action) =>
+        action.type === 'RETRY_PAYMENT' && action.status === 'SUCCESS',
     );
 
-  if (!successfulAction) {
-    throw new NotFoundException(
-      `No successful recovery action found for case ${recoveryCaseId}.`,
-    );
-  }
+    if (!successfulAction) {
+      throw new NotFoundException(
+        `No successful recovery action found for case ${recoveryCaseId}.`,
+      );
+    }
 
-  if (!recoveryCase.payment) {
-    throw new NotFoundException(
-      `Recovery case ${recoveryCaseId} has no payment.`,
-    );
-  }
+    if (!recoveryCase.payment) {
+      throw new NotFoundException(
+        `Recovery case ${recoveryCaseId} has no payment.`,
+      );
+    }
 
-  const recoveredAmount =
-    Number(recoveryCase.payment.amount);
+    if (recoveryCase.payment.status !== 'CAPTURED') {
+      throw new NotFoundException(
+        `Recovery action succeeded but payment ${recoveryCase.payment.id} is not CAPTURED.`,
+      );
+    }
 
-  const outcome =
-    await this.prisma.recoveryOutcome.create({
+    const recoveredAmount = Number(recoveryCase.payment.amount);
+
+    const outcome = await this.prisma.recoveryOutcome.create({
       data: {
         recoveryCaseId: recoveryCase.id,
         recoveredAmount,
@@ -362,16 +321,16 @@ export class RecoveryService {
       },
     });
 
-  await this.prisma.recoveryCase.update({
-    where: {
-      id: recoveryCase.id,
-    },
-    data: {
-      status: 'RECOVERED',
-      closedAt: new Date(),
-    },
-  });
+    await this.prisma.recoveryCase.update({
+      where: {
+        id: recoveryCase.id,
+      },
+      data: {
+        status: 'RECOVERED',
+        closedAt: new Date(),
+      },
+    });
 
-  return outcome;
-}
+    return outcome;
+  }
 }
