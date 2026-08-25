@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bot,
   LayoutDashboard,
+  Layers,
   Settings,
   ShieldCheck,
 } from 'lucide-react'
@@ -19,6 +20,11 @@ const navigation = [
     label: 'Recovery Cases',
     icon: Activity,
     path: '/recovery-cases',
+  },
+  {
+    label: 'Batches',
+    icon: Layers,
+    path: '/batches',
   },
   {
     label: 'Agent Activity',

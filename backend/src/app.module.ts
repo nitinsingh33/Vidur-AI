@@ -17,6 +17,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { RecoveryQueueModule } from './recovery-queue/recovery-queue.module';
 import { AuditModule } from './audit/audit.module';
 import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.module';
+import { MerchantsModule } from './merchants/merchants.module';
 
 
 @Module({
@@ -44,6 +45,7 @@ import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.modul
     EscalationModule,
     RecoveryQueueModule,
     RecoveryBatchesModule,
+    MerchantsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,6 +4,7 @@ import { Topbar } from './components/layout/Topbar'
 import { Dashboard } from './pages/Dashboard'
 import { Landing } from './pages/Landing'
 import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
+import { RecoveryBatches } from './pages/RecoveryBatches'
 import './index.css'
 
 function AppShell() {
@@ -27,6 +28,8 @@ function AppShell() {
               path="/recovery-cases/:recoveryCaseId"
               element={<RecoveryCaseDetails />}
             />
+
+            <Route path="/batches" element={<RecoveryBatches />} />
 
             <Route
               path="*"
