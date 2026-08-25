@@ -18,6 +18,7 @@ import { RecoveryQueueModule } from './recovery-queue/recovery-queue.module';
 import { AuditModule } from './audit/audit.module';
 import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.module';
 import { MerchantsModule } from './merchants/merchants.module';
+import { AuthModule } from './auth/auth.module';
 
 
 @Module({
@@ -46,6 +47,7 @@ import { MerchantsModule } from './merchants/merchants.module';
     RecoveryQueueModule,
     RecoveryBatchesModule,
     MerchantsModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,0 +1,127 @@
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
+
+import { PrismaService } from '../../prisma/prisma.service';
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+
+const PASSWORD_SALT_ROUNDS = 10;
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  private issueToken(user: { id: string; merchantId: string; email: string }) {
+    return this.jwtService.sign({
+      sub: user.id,
+      merchantId: user.merchantId,
+      email: user.email,
+    });
+  }
+
+  private toSession(user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    merchant: { id: string; name: string };
+  }) {
+    return {
+      accessToken: this.issueToken({
+        id: user.id,
+        merchantId: user.merchant.id,
+        email: user.email,
+      }),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      merchant: user.merchant,
+    };
+  }
+
+  async signup(dto: SignupDto) {
+    const existing = await this.prisma.merchantUser.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        'An account with this email already exists.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(
+      dto.password,
+      PASSWORD_SALT_ROUNDS,
+    );
+
+    const merchant = await this.prisma.merchant.create({
+      data: {
+        name: dto.merchantName,
+        email: dto.email,
+      },
+    });
+
+    const user = await this.prisma.merchantUser.create({
+      data: {
+        merchantId: merchant.id,
+        name: dto.name,
+        email: dto.email,
+        passwordHash,
+        role: 'ADMIN',
+      },
+      include: { merchant: true },
+    });
+
+    return this.toSession(user);
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.merchantUser.findUnique({
+      where: { email: dto.email },
+      include: { merchant: true },
+    });
+
+    const passwordMatches = user
+      ? await bcrypt.compare(dto.password, user.passwordHash)
+      : false;
+
+    if (!user || !passwordMatches) {
+      throw new UnauthorizedException('Invalid email or password.');
+    }
+
+    return this.toSession(user);
+  }
+
+  async me(userId: string) {
+    const user = await this.prisma.merchantUser.findUnique({
+      where: { id: userId },
+      include: { merchant: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Session is no longer valid.');
+    }
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      merchant: { id: user.merchant.id, name: user.merchant.name },
+    };
+  }
+}

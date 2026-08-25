@@ -137,17 +137,17 @@ model Merchant {
 }
 
 model MerchantUser {
-  id         String           @id @default(uuid())
-  merchantId String
-  name       String
-  email      String
-  role       MerchantUserRole
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  id           String           @id @default(uuid())
+  merchantId   String
+  name         String
+  email        String           @unique
+  passwordHash String
+  role         MerchantUserRole
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  @@unique([merchantId, email])
   @@index([merchantId])
 }
 
