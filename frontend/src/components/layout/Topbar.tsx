@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Bell, LogOut, Search, Settings } from 'lucide-react'
+import { Bell, LogOut, Menu, Search, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getAuditLog, type AuditLogEntry } from '../../api/audit'
 import { useAuth } from '../../context/AuthContext'
@@ -24,7 +24,11 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-export function Topbar() {
+interface TopbarProps {
+  onMenuClick: () => void
+}
+
+export function Topbar({ onMenuClick }: TopbarProps) {
   const { token, user, merchant, logout } = useAuth()
   const navigate = useNavigate()
   const searchRef = useRef<HTMLInputElement>(null)
@@ -58,8 +62,17 @@ export function Topbar() {
   }
 
   return (
-    <header className="flex h-16 items-center justify-between gap-4 border-b border-border px-6">
-      <div className="flex h-9 max-w-sm flex-1 items-center gap-2 rounded-lg border border-input bg-secondary/50 px-3 text-sm text-muted-foreground focus-within:border-ring">
+    <header className="flex h-16 items-center justify-between gap-4 border-b border-border px-4 md:px-6">
+      <button
+        type="button"
+        aria-label="Open navigation"
+        onClick={onMenuClick}
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground md:hidden"
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className="hidden h-9 max-w-sm flex-1 items-center gap-2 rounded-lg border border-input bg-secondary/50 px-3 text-sm text-muted-foreground focus-within:border-ring sm:flex">
         <Search size={15} strokeWidth={1.8} />
         <input
           ref={searchRef}

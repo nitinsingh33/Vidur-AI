@@ -77,12 +77,27 @@ export interface RecoveryCasesResponse {
   }
 }
 
+export interface GetRecoveryCasesOptions {
+  page?: number
+  limit?: number
+  status?: string
+  riskLevel?: string
+}
+
 export async function getRecoveryCases(
-  page = 1,
-  limit = 5,
+  options: GetRecoveryCasesOptions = {},
 ): Promise<RecoveryCasesResponse> {
+  const { page = 1, limit = 5, status, riskLevel } = options
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  })
+  if (status) params.set('status', status)
+  if (riskLevel) params.set('riskLevel', riskLevel)
+
   const response = await fetch(
-    `${API_BASE_URL}/recovery-cases?page=${page}&limit=${limit}`,
+    `${API_BASE_URL}/recovery-cases?${params.toString()}`,
   )
 
   if (!response.ok) {

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
@@ -16,12 +17,17 @@ import { Settings } from './pages/Settings'
 import './index.css'
 
 function AppShell() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar />
+      <Sidebar
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
+        <Topbar onMenuClick={() => setMobileNavOpen(true)} />
 
         <main className="flex-1 overflow-x-hidden px-6 py-8 md:px-10">
           <div className="mx-auto max-w-[1400px]">

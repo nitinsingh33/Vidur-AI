@@ -1,105 +1,137 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
+  Activity,
   ArrowRight,
   Bot,
   Check,
   CircleDollarSign,
-  GitBranch,
+  Eye,
+  RefreshCw,
+  Search,
   ShieldCheck,
-  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
   Zap,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { HeroRecoveryCard } from "../components/landing/HeroRecoveryCard";
+import { LandingFooter } from "../components/landing/LandingFooter";
+import { LandingNavbar } from "../components/landing/LandingNavbar";
+import { ProductPreview } from "../components/landing/ProductPreview";
 
-const orchestrationNodes = [
-  {
-    key: "detect",
-    label: "Detect",
-    icon: CircleDollarSign,
-    top: "22.5%",
-    left: "17.5%",
-  },
-  {
-    key: "diagnose",
-    label: "Diagnose",
-    icon: Sparkles,
-    top: "22.5%",
-    left: "82.5%",
-  },
-  {
-    key: "policy",
-    label: "Policy",
-    icon: ShieldCheck,
-    top: "77.5%",
-    left: "17.5%",
-  },
-  { key: "recover", label: "Recover", icon: Zap, top: "77.5%", left: "82.5%" },
-] as const;
+const traditionalSteps = ["Fixed retry rules", "Repeated attempts"];
 
-const stats = [
-  { value: "3", label: "Revenue-loss scenarios", tone: "text-emerald-400" },
-  { value: "5", label: "Recovery channels", tone: "text-emerald-400" },
-  {
-    value: "3x",
-    label: "Max attempts, then escalate",
-    tone: "text-emerald-400",
-  },
-  { value: "100%", label: "Decisions audited", tone: "text-emerald-400" },
+const vidurSteps = [
+  "Detect",
+  "Diagnose",
+  "Predict",
+  "Decide",
+  "Policy-check",
+  "Orchestrate",
+  "Learn",
 ];
 
 const workflow = [
   {
     number: "01",
     title: "Detect",
-    description: "Identify payment failures and open a recovery case.",
+    description: "Identify failed or at-risk payments.",
     icon: CircleDollarSign,
   },
   {
     number: "02",
-    title: "Assess",
-    description: "Estimate recovery probability and revenue exposure.",
-    icon: GitBranch,
+    title: "Diagnose",
+    description: "Understand failure reason and relevant payment/customer context.",
+    icon: Search,
   },
   {
     number: "03",
     title: "Decide",
-    description: "Select the safest recovery intervention for the case.",
+    description: "Determine recovery probability and the best next action.",
     icon: Bot,
   },
   {
     number: "04",
-    title: "Protect",
-    description: "Evaluate the action against merchant recovery policies.",
+    title: "Orchestrate",
+    description: "Execute the recovery action according to configured policies.",
     icon: ShieldCheck,
   },
   {
     number: "05",
     title: "Recover",
-    description: "Execute, observe the outcome, or escalate to humans.",
+    description: "Measure the outcome and record the result.",
     icon: Zap,
   },
 ];
 
-const capabilities = [
+const intelligenceBlocks = [
   {
-    icon: Bot,
-    title: "Agentic decisions",
-    description:
-      "Vidur evaluates recovery context and selects an intervention instead of relying on a fixed retry script.",
+    icon: Activity,
+    title: "Payment context",
+    description: "Order, customer, and payment method history.",
+  },
+  {
+    icon: Search,
+    title: "Failure diagnosis",
+    description: "The likely reason a payment failed.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Recovery probability",
+    description: "Estimated likelihood of recovering the payment.",
   },
   {
     icon: ShieldCheck,
-    title: "Policy controlled",
-    description:
-      "Recovery actions are checked against merchant-defined limits before execution.",
+    title: "Policy evaluation",
+    description: "Whether the action is within configured limits.",
   },
   {
-    icon: GitBranch,
-    title: "Observable recovery",
-    description:
-      "Every action, decision, policy result, and outcome becomes part of the recovery timeline.",
+    icon: Target,
+    title: "Action selection",
+    description: "The recovery action Vidur AI chooses to take.",
   },
+  {
+    icon: Eye,
+    title: "Outcome tracking",
+    description: "What happened, recorded for every case.",
+  },
+];
+
+const useCases = [
+  {
+    id: "failed-payments",
+    icon: CircleDollarSign,
+    title: "Failed Payments",
+    description: "Recover transactions before they become lost revenue.",
+  },
+  {
+    id: "subscriptions",
+    icon: RefreshCw,
+    title: "Subscriptions",
+    description: "Reduce involuntary churn caused by recurring payment failures.",
+  },
+  {
+    id: "payment-operations",
+    icon: Activity,
+    title: "Payment Operations",
+    description: "Give teams visibility into recovery decisions and outcomes.",
+  },
+  {
+    id: "revenue-leakage",
+    icon: TrendingDown,
+    title: "Revenue Leakage",
+    description: "Prioritize recovery opportunities based on financial impact.",
+  },
+];
+
+const whyVidur = [
+  { icon: Activity, label: "Context-aware recovery" },
+  { icon: Bot, label: "AI-driven decisions" },
+  { icon: ShieldCheck, label: "Policy-controlled actions" },
+  { icon: Zap, label: "Automated orchestration" },
+  { icon: Eye, label: "Observable recovery outcomes" },
 ];
 
 export function Landing() {
@@ -108,36 +140,10 @@ export function Landing() {
   return (
     <div className="relative min-h-screen overflow-x-clip bg-background">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[720px] opacity-40 [background-image:radial-gradient(circle,color-mix(in_oklch,var(--foreground),transparent_82%)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_65%_55%_at_50%_0%,black,transparent)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,color-mix(in_oklch,var(--primary),transparent_78%),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,color-mix(in_oklch,var(--primary),transparent_82%),transparent)]" />
 
       {/* Navigation */}
-      <nav className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <a href="/" aria-label="Vidur AI home" className="flex items-center">
-          <img src="/brand.png" alt="Vidur AI" className="h-25 w-46 shrink-0" />
-        </a>
-
-        <div className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-          <a href="#platform" className="hover:text-foreground">
-            Platform
-          </a>
-          <a href="#workflow" className="hover:text-foreground">
-            How it works
-          </a>
-          <a href="#intelligence" className="hover:text-foreground">
-            Intelligence
-          </a>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => navigate("/login")}>
-            Sign in
-          </Button>
-          <Button onClick={() => navigate("/signup")}>
-            Get started
-            <ArrowRight size={15} />
-          </Button>
-        </div>
-      </nav>
+      <LandingNavbar />
 
       {/* Hero */}
       <main className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-6 py-16 lg:grid-cols-2 lg:py-24">
@@ -147,7 +153,7 @@ export function Landing() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}>
-            Revenue Recovery Platform
+            AI-Powered Revenue Recovery
           </motion.div>
 
           <motion.h1
@@ -166,9 +172,9 @@ export function Landing() {
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.18 }}>
-            Vidur AI turns payment failures into intelligent recovery workflows
-            — assessing risk, selecting interventions, enforcing policies, and
-            observing the outcome.
+            Vidur AI turns payment failures into intelligent recovery
+            workflows — diagnosing why payments fail, deciding what to do
+            next, and orchestrating recovery automatically.
           </motion.p>
 
           <motion.div
@@ -180,7 +186,7 @@ export function Landing() {
               size="lg"
               className="h-11 px-6"
               onClick={() => navigate("/signup")}>
-              Explore Vidur AI
+              Get started
               <ArrowRight size={17} />
             </Button>
 
@@ -207,127 +213,67 @@ export function Landing() {
           </motion.div>
         </div>
 
-        {/* Hero orchestration visual */}
+        {/* Hero recovery decision visual */}
         <motion.div
-          className="relative mx-auto aspect-square w-full max-w-[440px]"
           initial={{ opacity: 0, x: 45 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.85, delay: 0.2 }}>
-          <div className="pointer-events-none absolute -inset-10 -z-10 rounded-full bg-primary/15 blur-[110px]" />
-
-          <div className="absolute inset-0 rounded-[28px] border border-border bg-card/40" />
-
-          <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full">
-            <path
-              d="M70,90 V170 H166"
-              stroke="var(--border)"
-              strokeWidth="1.5"
-              fill="none"
-            />
-            <path
-              d="M330,90 V170 H234"
-              stroke="var(--border)"
-              strokeWidth="1.5"
-              fill="none"
-            />
-            <path
-              d="M70,310 V230 H166"
-              stroke="var(--border)"
-              strokeWidth="1.5"
-              fill="none"
-            />
-            <path
-              d="M330,310 V230 H234"
-              stroke="var(--border)"
-              strokeWidth="1.5"
-              fill="none"
-            />
-          </svg>
-
-          {/* Center orb */}
-          <motion.div
-            className="absolute left-1/2 top-1/2 flex size-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-primary/30 bg-card"
-            style={{ boxShadow: "0 0 70px -12px var(--primary)" }}
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}>
-            <div className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Bot size={26} />
-            </div>
-          </motion.div>
-
-          {/* Orchestration nodes */}
-          {orchestrationNodes.map((node, index) => (
-            <motion.div
-              key={node.key}
-              className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2"
-              style={{ top: node.top, left: node.left }}
-              animate={{ y: [0, index % 2 === 0 ? -6 : 6, 0] }}
-              transition={{
-                duration: 4 + index * 0.3,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}>
-              <div className="flex size-11 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg">
-                <node.icon size={18} />
-              </div>
-              <span className="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground shadow-lg">
-                {node.label}
-              </span>
-            </motion.div>
-          ))}
+          transition={{ duration: 0.7, delay: 0.2 }}>
+          <HeroRecoveryCard />
         </motion.div>
       </main>
 
-      {/* By the numbers */}
-      <section className="relative mx-auto max-w-6xl px-6 pb-20">
-        <div className="rounded-2xl border border-primary/20 bg-gradient-to-b from-primary/10 to-transparent p-8 sm:p-10">
-          <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
-            By the design
-          </span>
-
-          <div className="mt-7 grid grid-cols-2 gap-8 sm:grid-cols-4">
-            {stats.map((stat) => (
-              <div key={stat.label}>
-                <strong className="font-heading text-4xl font-medium tracking-tight text-foreground">
-                  {stat.value}
-                </strong>
-                <p className={`mt-1.5 text-sm font-medium ${stat.tone}`}>
-                  {stat.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Value strip */}
+      {/* Product / value positioning */}
       <section id="platform" className="border-y border-border bg-secondary/20">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-xs">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="max-w-lg">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-              Vidur AI
+              Product
             </span>
-            <p className="mt-1 text-lg font-semibold leading-snug text-foreground">
-              A recovery system that thinks beyond retries.
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
+              Not a retry system. A recovery decision engine.
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Traditional recovery tools retry blindly. Vidur AI evaluates
+              context and decides.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-            {[
-              { label: "Risk", desc: "Understand the case" },
-              { label: "Strategy", desc: "Choose the intervention" },
-              { label: "Policy", desc: "Stay within boundaries" },
-              { label: "Outcome", desc: "Learn from execution" },
-            ].map((item) => (
-              <div key={item.label}>
-                <strong className="text-sm font-semibold text-foreground">
-                  {item.label}
-                </strong>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {item.desc}
-                </p>
+          <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-background/60 p-6">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Traditional recovery
+              </span>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {traditionalSteps.map((step, index) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground">
+                      {step}
+                    </span>
+                    {index < traditionalSteps.length - 1 && (
+                      <ArrowRight size={14} className="text-muted-foreground/50" />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-6">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Vidur AI
+              </span>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {vidurSteps.map((step, index) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="rounded-full border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-foreground">
+                      {step}
+                    </span>
+                    {index < vidurSteps.length - 1 && (
+                      <ArrowRight size={14} className="text-primary/50" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -336,14 +282,14 @@ export function Landing() {
       <section id="workflow" className="mx-auto max-w-6xl px-6 py-24">
         <div className="max-w-lg">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-            The recovery loop
+            How it works
           </span>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
             From payment failure to recovery outcome.
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Vidur connects detection, risk assessment, strategy, policy
-            enforcement, execution, and observation into one recovery loop.
+            Vidur AI connects detection, diagnosis, decisioning,
+            orchestration, and outcome tracking into one recovery loop.
           </p>
         </div>
 
@@ -373,241 +319,188 @@ export function Landing() {
       </section>
 
       {/* Intelligence */}
-      <section id="intelligence" className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-2">
-          <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-              Recovery intelligence
-            </span>
-            <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-foreground">
-              Decisions backed by
-              <span className="block text-muted-foreground">
-                context, not guesswork.
+      <section id="intelligence" className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <div className="grid grid-cols-1 gap-14 lg:grid-cols-2">
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Recovery intelligence
               </span>
-            </h2>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-              A recovery case is more than a failed transaction. Vidur evaluates
-              payment context, customer history, failure signals, recovery
-              probability, and policy boundaries before an action is executed.
-            </p>
-
-            <Button
-              variant="outline"
-              className="mt-6"
-              onClick={() => navigate("/signup")}>
-              View live dashboard
-              <ArrowRight size={15} />
-            </Button>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Case analysis
+              <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-foreground">
+                Decisions backed by
+                <span className="block text-muted-foreground">
+                  context, not guesswork.
                 </span>
-                <strong className="mt-1 block text-sm font-semibold text-foreground">
-                  Recovery signal
-                </strong>
-              </div>
-              <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-                Analyzing
-              </span>
+              </h2>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+                A recovery case is more than a failed transaction. Vidur AI
+                evaluates payment context, diagnoses the failure, estimates
+                recovery probability, checks policy, selects an action, and
+                tracks the outcome.
+              </p>
+
+              <Button
+                variant="outline"
+                className="mt-6"
+                onClick={() => navigate("/signup")}>
+                View live dashboard
+                <ArrowRight size={15} />
+              </Button>
             </div>
 
-            <div className="mt-5 space-y-3">
-              {[
-                ["Payment method", "UPI"],
-                ["Failure reason", "Insufficient funds"],
-                ["Previous payment history", "Available"],
-              ].map(([label, value]) => (
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              {intelligenceBlocks.map((block) => (
                 <div
-                  key={label}
-                  className="flex items-center justify-between border-b border-border pb-3 text-sm">
-                  <span className="text-muted-foreground">{label}</span>
-                  <strong className="text-foreground">{value}</strong>
+                  key={block.title}
+                  className="rounded-xl border border-border bg-card p-4.5"
+                >
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <block.icon size={16} />
+                  </div>
+                  <h3 className="mt-3 text-sm font-semibold text-foreground">
+                    {block.title}
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {block.description}
+                  </p>
                 </div>
               ))}
-            </div>
-
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Recovery probability
-                </span>
-                <strong className="text-foreground">40%</strong>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
-                <motion.div
-                  className="h-full rounded-full bg-primary"
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "40%" }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 1 }}
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-secondary/40 p-3.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                <Bot size={16} />
-              </div>
-              <div className="flex-1">
-                <span className="block text-xs text-muted-foreground">
-                  Agent recommendation
-                </span>
-                <strong className="block text-sm font-semibold text-foreground">
-                  Retry payment later
-                </strong>
-              </div>
-              <Check size={17} className="text-emerald-400" />
             </div>
           </div>
         </div>
       </section>
 
-      {/* Capabilities */}
+      {/* Use cases */}
+      <section id="solutions" className="border-t border-border bg-secondary/20">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <div className="max-w-lg">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+              Solutions
+            </span>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
+              Built for where revenue leaks.
+            </h2>
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {useCases.map((item, index) => (
+              <motion.article
+                key={item.title}
+                id={item.id}
+                className="rounded-xl border border-border bg-card p-6"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.08 }}>
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <item.icon size={18} />
+                </div>
+                <h3 className="mt-4 text-sm font-semibold text-foreground">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {item.description}
+                </p>
+              </motion.article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Product preview */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-xl text-center">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-            Built for control
+            Product preview
           </span>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
-            Autonomous where it should be.
-            <span className="block text-muted-foreground">
-              Controlled where it matters.
-            </span>
+            A window into the Vidur AI dashboard.
           </h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            The same recovery intelligence merchants see inside the product
+            — revenue at risk, recovery probability, and every decision in
+            the timeline.
+          </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {capabilities.map((item, index) => (
-            <motion.article
-              key={item.title}
-              className="rounded-xl border border-border bg-card p-6"
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.08 }}>
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <item.icon size={18} />
-              </div>
-              <h3 className="mt-4 text-sm font-semibold text-foreground">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {item.description}
-              </p>
-            </motion.article>
-          ))}
+        <motion.div
+          className="mt-10"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.6 }}>
+          <ProductPreview />
+        </motion.div>
+      </section>
+
+      {/* Why Vidur AI */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-6 py-24 text-center">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+            Why Vidur AI
+          </span>
+          <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-foreground">
+            Recovery shouldn't be a retry loop. It should be intelligent.
+          </h2>
+
+          <div className="mx-auto mt-10 flex max-w-4xl flex-wrap items-center justify-center gap-x-8 gap-y-5">
+            {whyVidur.map((item) => (
+              <span
+                key={item.label}
+                className="flex items-center gap-2 text-sm font-medium text-foreground"
+              >
+                <item.icon size={16} className="text-primary" />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Integration / infrastructure */}
+      <section className="border-t border-border bg-secondary/20">
+        <div className="mx-auto max-w-6xl px-6 py-16 text-center">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+            Infrastructure
+          </span>
+          <h2 className="mx-auto mt-3 max-w-xl text-2xl font-semibold tracking-tight text-foreground">
+            Built on modern payment infrastructure.
+          </h2>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+            Vidur AI's recovery actions run against Razorpay's payment APIs,
+            designed to extend to additional payment infrastructure as
+            recovery workflows mature.
+          </p>
+
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
+            <CircleDollarSign size={15} className="text-primary" />
+            Razorpay
+          </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="relative mx-auto max-w-6xl px-6 py-24 text-center">
-        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-64 w-[80%] rounded-full bg-primary/15 blur-[100px]" />
+      <section className="mx-auto max-w-6xl px-6 py-24 text-center">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-10 sm:p-14">
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+            Don't let failed payments become lost revenue.
+          </h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Start recovering intelligently.
+          </p>
 
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-          Vidur AI
-        </span>
-        <h2 className="mx-auto mt-3 max-w-xl text-3xl font-semibold tracking-tight text-foreground">
-          Turn failed payments into recoverable revenue.
-        </h2>
-        <p className="mt-3 text-sm text-muted-foreground">
-          See the recovery system behind the interface.
-        </p>
-
-        <Button size="lg" className="mt-7" onClick={() => navigate("/signup")}>
-          Open Vidur AI Dashboard
-          <ArrowRight size={17} />
-        </Button>
+          <Button
+            size="lg"
+            className="mt-7"
+            onClick={() => navigate("/signup")}>
+            Get started
+            <ArrowRight size={17} />
+          </Button>
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
-            <div className="col-span-2 sm:col-span-1">
-              <img
-                src="/brand.png"
-                alt="Vidur AI"
-                className="h-16 w-32 shrink-0"
-              />
-              <p className="mt-3 max-w-[220px] text-xs leading-relaxed text-muted-foreground">
-                Revenue recovery infrastructure for modern payment systems.
-              </p>
-            </div>
-
-            <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Product
-              </span>
-              <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
-                <li>
-                  <a href="#platform" className="hover:text-foreground">
-                    Platform
-                  </a>
-                </li>
-                <li>
-                  <a href="#workflow" className="hover:text-foreground">
-                    How it works
-                  </a>
-                </li>
-                <li>
-                  <a href="#intelligence" className="hover:text-foreground">
-                    Intelligence
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Account
-              </span>
-              <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/login')}
-                    className="hover:text-foreground"
-                  >
-                    Sign in
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/signup')}
-                    className="hover:text-foreground"
-                  >
-                    Get started
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Vidur AI
-              </span>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Built for Razorpay's Revenue Recovery track.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-center sm:flex-row sm:text-left">
-            <span className="text-xs text-muted-foreground">
-              © 2026 Vidur AI. All rights reserved.
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Made for the Razorpay Buildathon.
-            </span>
-          </div>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   );
 }

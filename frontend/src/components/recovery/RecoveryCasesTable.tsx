@@ -30,8 +30,13 @@ export function RecoveryCasesTable({
       </div>
 
       {cases.length === 0 ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-          No recovery cases yet.
+        <div className="px-5 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">
+            No active recovery cases
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Vidur AI hasn't detected any cases requiring action.
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
