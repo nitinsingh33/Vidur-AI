@@ -82,3 +82,44 @@ export async function fetchSession(
 
   return response.json()
 }
+
+export async function updateProfile(
+  token: string,
+  name: string,
+): Promise<{ user: AuthUser; merchant: AuthMerchant }> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ name }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/auth/password`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}

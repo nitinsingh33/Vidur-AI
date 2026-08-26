@@ -19,12 +19,14 @@ import {
 const TOKEN_STORAGE_KEY = 'vidur_token'
 
 interface AuthContextValue {
+  token: string | null
   user: AuthUser | null
   merchant: AuthMerchant | null
   isLoading: boolean
   login: (payload: LoginPayload) => Promise<void>
   signup: (payload: SignupPayload) => Promise<void>
   logout: () => void
+  setSession: (user: AuthUser, merchant: AuthMerchant) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -92,9 +94,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMerchant(null)
   }, [])
 
+  const setSession = useCallback(
+    (nextUser: AuthUser, nextMerchant: AuthMerchant) => {
+      setUser(nextUser)
+      setMerchant(nextMerchant)
+    },
+    [],
+  )
+
   return (
     <AuthContext.Provider
-      value={{ user, merchant, isLoading, login, signup, logout }}
+      value={{
+        token,
+        user,
+        merchant,
+        isLoading,
+        login,
+        signup,
+        logout,
+        setSession,
+      }}
     >
       {children}
     </AuthContext.Provider>

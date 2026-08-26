@@ -29,7 +29,7 @@ export function Sidebar() {
         className="mb-8 flex items-center px-2"
       >
         <img
-          src="/vidur_ai_hero.png"
+          src="/brand_logo.png"
           alt="Vidur AI"
           className="h-9 w-auto shrink-0"
         />

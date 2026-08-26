@@ -24,6 +24,13 @@ export class PolicyService {
     private readonly auditService: AuditService,
   ) {}
 
+  findAllForMerchant(merchantId: string) {
+    return this.prisma.policy.findMany({
+      where: { merchantId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async check(
     merchantId: string,
     actionType: RecoveryActionType,

@@ -34,4 +34,28 @@ export class AuditService {
       orderBy: { createdAt: 'asc' },
     });
   }
+
+  async findByMerchant(merchantId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { merchantId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.auditLog.count({ where: { merchantId } }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
 }

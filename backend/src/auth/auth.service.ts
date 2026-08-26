@@ -9,6 +9,8 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 const PASSWORD_SALT_ROUNDS = 10;
 
@@ -123,5 +125,54 @@ export class AuthService {
       },
       merchant: { id: user.merchant.id, name: user.merchant.name },
     };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.merchantUser.update({
+      where: { id: userId },
+      data: { name: dto.name },
+      include: { merchant: true },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      merchant: { id: user.merchant.id, name: user.merchant.name },
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.merchantUser.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Session is no longer valid.');
+    }
+
+    const currentMatches = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+
+    if (!currentMatches) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+
+    const passwordHash = await bcrypt.hash(
+      dto.newPassword,
+      PASSWORD_SALT_ROUNDS,
+    );
+
+    await this.prisma.merchantUser.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { success: true };
   }
 }

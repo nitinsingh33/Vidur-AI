@@ -9,6 +9,10 @@ import { Login } from './pages/Login'
 import { SignUp } from './pages/SignUp'
 import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
+import { AgentActivity } from './pages/AgentActivity'
+import { Analytics } from './pages/Analytics'
+import { Policies } from './pages/Policies'
+import { Settings } from './pages/Settings'
 import './index.css'
 
 function AppShell() {
@@ -36,10 +40,29 @@ function AppShell() {
 
               <Route path="/batches" element={<RecoveryBatches />} />
 
+              <Route path="/agent-activity" element={<AgentActivity />} />
+
+              <Route path="/analytics" element={<Analytics />} />
+
+              <Route path="/policies" element={<Policies />} />
+
+              <Route path="/settings" element={<Settings />} />
+
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>
         </main>
+
+        <footer className="border-t border-border px-6 py-4 md:px-10">
+          <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left">
+            <span className="text-xs text-muted-foreground">
+              © 2026 Vidur AI
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Revenue recovery infrastructure for modern payment systems.
+            </span>
+          </div>
+        </footer>
       </div>
     </div>
   )
