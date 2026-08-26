@@ -90,16 +90,12 @@ export function Landing() {
 
       {/* Navigation */}
       <nav className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <a href="/" aria-label="Vidur AI home" className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-            V
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-foreground">Vidur AI</div>
-            <div className="text-[11px] text-muted-foreground">
-              Agentic Revenue Recovery
-            </div>
-          </div>
+        <a href="/" aria-label="Vidur AI home" className="flex items-center">
+          <img
+            src="/vidur_ai_hero.png"
+            alt="Vidur AI"
+            className="h-9 w-auto shrink-0"
+          />
         </a>
 
         <div className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
@@ -481,16 +477,12 @@ export function Landing() {
       {/* Footer */}
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-10 text-center sm:flex-row sm:justify-between sm:text-left">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-              V
-            </div>
-            <div className="leading-tight">
-              <strong className="block text-sm text-foreground">Vidur AI</strong>
-              <span className="text-xs text-muted-foreground">
-                Agentic Revenue Recovery
-              </span>
-            </div>
+          <div className="flex items-center">
+            <img
+              src="/vidur_ai_hero.png"
+              alt="Vidur AI"
+              className="h-8 w-auto shrink-0"
+            />
           </div>
 
           <span className="text-xs text-muted-foreground">

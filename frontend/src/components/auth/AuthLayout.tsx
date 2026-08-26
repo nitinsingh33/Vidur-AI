@@ -24,19 +24,13 @@ export function AuthLayout({
 
         <Link
           to="/"
-          className="relative z-10 flex items-center gap-2.5"
+          className="relative z-10 flex items-center"
         >
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary font-semibold text-primary-foreground">
-            V
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-foreground">
-              Vidur AI
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Agentic Revenue Recovery
-            </div>
-          </div>
+          <img
+            src="/vidur_ai_hero.png"
+            alt="Vidur AI"
+            className="h-10 w-auto shrink-0"
+          />
         </Link>
 
         <motion.div
@@ -98,14 +92,13 @@ export function AuthLayout({
         >
           <Link
             to="/"
-            className="mb-8 flex items-center gap-2.5 lg:hidden"
+            className="mb-8 flex items-center lg:hidden"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              V
-            </div>
-            <span className="text-sm font-semibold text-foreground">
-              Vidur AI
-            </span>
+            <img
+              src="/vidur_ai_hero.png"
+              alt="Vidur AI"
+              className="h-9 w-auto shrink-0"
+            />
           </Link>
 
           <h2 className="text-xl font-semibold text-foreground">

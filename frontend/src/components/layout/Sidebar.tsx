@@ -26,19 +26,13 @@ export function Sidebar() {
     <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6 md:flex">
       <a
         href="/"
-        className="mb-8 flex items-center gap-2.5 px-2"
+        className="mb-8 flex items-center px-2"
       >
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-          V
-        </div>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold text-sidebar-foreground">
-            Vidur AI
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            Revenue Recovery
-          </div>
-        </div>
+        <img
+          src="/vidur_ai_hero.png"
+          alt="Vidur AI"
+          className="h-9 w-auto shrink-0"
+        />
       </a>
 
       <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
