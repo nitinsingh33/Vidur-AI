@@ -1,19 +1,30 @@
 import { useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
-import { Dashboard } from './pages/Dashboard'
+import { ScrollToTop } from './components/layout/ScrollToTop'
+
 import { Landing } from './pages/Landing'
+import { Product } from './pages/Product'
+import { Solutions } from './pages/Solutions'
+import { HowItWorks } from './pages/HowItWorks'
+import { Developers } from './pages/Developers'
+import { Pricing } from './pages/Pricing'
+
 import { Login } from './pages/Login'
 import { SignUp } from './pages/SignUp'
+
+import { Dashboard } from './pages/Dashboard'
 import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
 import { AgentActivity } from './pages/AgentActivity'
 import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
 import { Settings } from './pages/Settings'
+
 import './index.css'
 
 function AppShell() {
@@ -32,8 +43,13 @@ function AppShell() {
         <main className="flex-1 overflow-x-hidden px-6 py-8 md:px-10">
           <div className="mx-auto max-w-[1400px]">
             <Routes>
-              <Route path="/dashboard" element={<Dashboard />} />
+              {/* Dashboard */}
+              <Route
+                path="/dashboard"
+                element={<Dashboard />}
+              />
 
+              {/* Recovery */}
               <Route
                 path="/recovery-cases"
                 element={<Dashboard showRecoveryCases />}
@@ -44,17 +60,40 @@ function AppShell() {
                 element={<RecoveryCaseDetails />}
               />
 
-              <Route path="/batches" element={<RecoveryBatches />} />
+              <Route
+                path="/batches"
+                element={<RecoveryBatches />}
+              />
 
-              <Route path="/agent-activity" element={<AgentActivity />} />
+              {/* Agent */}
+              <Route
+                path="/agent-activity"
+                element={<AgentActivity />}
+              />
 
-              <Route path="/analytics" element={<Analytics />} />
+              {/* Analytics */}
+              <Route
+                path="/analytics"
+                element={<Analytics />}
+              />
 
-              <Route path="/policies" element={<Policies />} />
+              {/* Policies */}
+              <Route
+                path="/policies"
+                element={<Policies />}
+              />
 
-              <Route path="/settings" element={<Settings />} />
+              {/* Settings */}
+              <Route
+                path="/settings"
+                element={<Settings />}
+              />
 
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* Unknown protected route */}
+              <Route
+                path="*"
+                element={<Navigate to="/dashboard" replace />}
+              />
             </Routes>
           </div>
         </main>
@@ -64,6 +103,7 @@ function AppShell() {
             <span className="text-xs text-muted-foreground">
               © 2026 Vidur AI
             </span>
+
             <span className="text-xs text-muted-foreground">
               Revenue recovery infrastructure for modern payment systems.
             </span>
@@ -78,10 +118,53 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<SignUp />} />
+          {/* ───────────────── Public marketing ───────────────── */}
+
+          <Route
+            path="/"
+            element={<Landing />}
+          />
+
+          <Route
+            path="/product"
+            element={<Product />}
+          />
+
+          <Route
+            path="/solutions"
+            element={<Solutions />}
+          />
+
+          <Route
+            path="/how-it-works"
+            element={<HowItWorks />}
+          />
+
+          <Route
+            path="/developers"
+            element={<Developers />}
+          />
+
+          <Route
+            path="/pricing"
+            element={<Pricing />}
+          />
+
+          {/* ───────────────── Authentication ───────────────── */}
+
+          <Route
+            path="/login"
+            element={<Login />}
+          />
+
+          <Route
+            path="/signup"
+            element={<SignUp />}
+          />
+
+          {/* ───────────────── Protected application ───────────────── */}
 
           <Route
             path="/*"

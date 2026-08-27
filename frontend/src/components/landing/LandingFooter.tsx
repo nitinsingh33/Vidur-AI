@@ -1,29 +1,55 @@
-import { useNavigate } from 'react-router-dom'
-import { ExternalLink } from 'lucide-react'
+import { motion } from 'framer-motion'
+import {
+  ArrowUpRight,
+  GitBranch,
+} from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 
-type ProductLink =
-  | { kind: 'anchor'; label: string; href: string }
-  | { kind: 'route'; label: string; route: string }
-
-const productLinks: ProductLink[] = [
-  { kind: 'anchor', label: 'Revenue Recovery', href: '#platform' },
-  { kind: 'anchor', label: 'AI Recovery', href: '#intelligence' },
-  { kind: 'route', label: 'Recovery Cases', route: '/recovery-cases' },
-  { kind: 'route', label: 'Analytics', route: '/analytics' },
+const productLinks = [
+  { label: 'Product', route: '/product' },
+  { label: 'Solutions', route: '/solutions' },
+  { label: 'How it works', route: '/how-it-works' },
 ]
 
-const solutionLinks = [
-  { label: 'Failed Payments', href: '#failed-payments' },
-  { label: 'Subscriptions', href: '#subscriptions' },
-  { label: 'Revenue Leakage', href: '#revenue-leakage' },
-  { label: 'Payment Operations', href: '#payment-operations' },
+const resourceLinks = [
+  { label: 'Developers', route: '/developers' },
+  { label: 'Pricing', route: '/pricing' },
+]
+
+const accountLinks = [
+  { label: 'Sign in', route: '/login' },
+  { label: 'Get started', route: '/signup' },
 ]
 
 function FooterHeading({ children }: { children: string }) {
   return (
-    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
       {children}
-    </span>
+    </div>
+  )
+}
+
+function FooterLink({
+  label,
+  route,
+}: {
+  label: string
+  route: string
+}) {
+  return (
+    <li>
+      <Link
+        to={route}
+        className="group inline-flex items-center text-sm text-muted-foreground transition-colors duration-200 hover:text-foreground"
+      >
+        <span>{label}</span>
+
+        <ArrowUpRight
+          size={13}
+          className="ml-1 -translate-x-0.5 translate-y-0.5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-60"
+        />
+      </Link>
+    </li>
   )
 }
 
@@ -31,111 +57,118 @@ export function LandingFooter() {
   const navigate = useNavigate()
 
   return (
-    <footer className="border-t border-border">
-      <div className="mx-auto max-w-6xl px-6 py-16 lg:py-20">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-3 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
-          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
-            <img
-              src="/brand.png"
-              alt="Vidur AI"
-              className="h-8 w-auto shrink-0"
-            />
-            <p className="mt-4 max-w-[240px] text-sm leading-relaxed text-muted-foreground">
+    <footer className="border-t border-border bg-background">
+      <div className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
+        {/* Main footer */}
+        <div className="grid gap-12 lg:grid-cols-[1.7fr_1fr_1fr_1fr]">
+          {/* Brand */}
+          <div>
+            <Link
+              to="/"
+              aria-label="Vidur AI home"
+              className="inline-flex items-center"
+            >
+              <img
+                src="/brand.png"
+                alt="Vidur AI"
+                className="h-9 w-auto"
+              />
+            </Link>
+
+            <p className="mt-5 max-w-[280px] text-sm leading-6 text-muted-foreground">
               Intelligent revenue recovery for modern payment systems.
             </p>
+
+            <motion.button
+              type="button"
+              onClick={() => navigate('/signup')}
+              className="group mt-7 inline-flex items-center gap-2 text-sm font-medium text-foreground"
+              whileHover={{ x: 3 }}
+              transition={{ duration: 0.2 }}
+            >
+              Start recovering
+              <ArrowUpRight
+                size={15}
+                className="text-primary transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+              />
+            </motion.button>
           </div>
 
+          {/* Product */}
           <div>
             <FooterHeading>Product</FooterHeading>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              {productLinks.map((link) => {
-                if (link.kind === 'anchor') {
-                  return (
-                    <li key={link.label}>
-                      <a href={link.href} className="hover:text-foreground">
-                        {link.label}
-                      </a>
-                    </li>
-                  )
-                }
 
-                return (
-                  <li key={link.label}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(link.route)}
-                      className="hover:text-foreground"
-                    >
-                      {link.label}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-
-          <div>
-            <FooterHeading>Solutions</FooterHeading>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              {solutionLinks.map((link) => (
-                <li key={link.label}>
-                  <a href={link.href} className="hover:text-foreground">
-                    {link.label}
-                  </a>
-                </li>
+            <ul className="mt-5 space-y-3">
+              {productLinks.map((link) => (
+                <FooterLink
+                  key={link.route}
+                  label={link.label}
+                  route={link.route}
+                />
               ))}
             </ul>
           </div>
 
+          {/* Resources */}
           <div>
-            <FooterHeading>Account</FooterHeading>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => navigate('/login')}
-                  className="hover:text-foreground"
-                >
-                  Sign in
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => navigate('/signup')}
-                  className="hover:text-foreground"
-                >
-                  Get started
-                </button>
-              </li>
+            <FooterHeading>Resources</FooterHeading>
+
+            <ul className="mt-5 space-y-3">
+              {resourceLinks.map((link) => (
+                <FooterLink
+                  key={link.route}
+                  label={link.label}
+                  route={link.route}
+                />
+              ))}
             </ul>
           </div>
 
+          {/* Account */}
           <div>
-            <FooterHeading>Connect</FooterHeading>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li>
-                <a
-                  href="https://github.com/nitinsingh33/RecoverAI-Agentic_Revenue_Recovery_Orchestrator"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 hover:text-foreground"
-                >
-                  GitHub
-                  <ExternalLink size={13} />
-                </a>
-              </li>
+            <FooterHeading>Account</FooterHeading>
+
+            <ul className="mt-5 space-y-3">
+              {accountLinks.map((link) => (
+                <FooterLink
+                  key={link.route}
+                  label={link.label}
+                  route={link.route}
+                />
+              ))}
             </ul>
           </div>
         </div>
 
-        <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-center sm:flex-row sm:text-left">
-          <span className="text-xs text-muted-foreground">
-            © 2026 Vidur AI. All rights reserved.
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Built for the Razorpay Buildathon.
-          </span>
+        {/* Bottom */}
+        <div className="mt-16 flex flex-col gap-5 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">
+              © 2026 Vidur AI. All rights reserved.
+            </span>
+
+            <span className="text-xs text-muted-foreground/60">
+              Revenue recovery infrastructure.
+            </span>
+          </div>
+
+          <a
+            href="https://github.com/nitinsingh33/RecoverAI-Agentic_Revenue_Recovery_Orchestrator"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Vidur AI on GitHub"
+            className="group inline-flex w-fit items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <GitBranch
+              size={15}
+              className="transition-transform duration-200 group-hover:-translate-y-0.5"
+            />
+            GitHub
+            <ArrowUpRight
+              size={12}
+              className="opacity-50 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+            />
+          </a>
         </div>
       </div>
     </footer>
