@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 export interface RecoveryBatchStatus {
   batchId: string
@@ -22,12 +22,16 @@ export interface RunBatchResult {
 }
 
 export async function detectBatch(
+  token: string,
   merchantId: string,
   limitPerType: number,
 ): Promise<RecoveryBatchStatus> {
   const response = await fetch(`${API_BASE_URL}/recovery-batches/detect`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ merchantId, limitPerType }),
   })
 
@@ -39,11 +43,15 @@ export async function detectBatch(
 }
 
 export async function runBatch(
+  token: string,
   batchId: string,
 ): Promise<RunBatchResult> {
   const response = await fetch(
     `${API_BASE_URL}/recovery-batches/${batchId}/run`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
   )
 
   if (!response.ok) {
@@ -54,10 +62,12 @@ export async function runBatch(
 }
 
 export async function getBatchStatus(
+  token: string,
   batchId: string,
 ): Promise<RecoveryBatchStatus> {
   const response = await fetch(
     `${API_BASE_URL}/recovery-batches/${batchId}`,
+    { headers: { Authorization: `Bearer ${token}` } },
   )
 
   if (!response.ok) {

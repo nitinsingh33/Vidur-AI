@@ -12,10 +12,12 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { StatusBadge } from '../components/ui/status-badge'
+import { useAuth } from '../context/AuthContext'
 import { batchStatusTone, formatAmount, formatLabel, caseStatusTone } from '../lib/status'
 
 export function RecoveryBatches() {
   const navigate = useNavigate()
+  const { token } = useAuth()
 
   const [merchants, setMerchants] = useState<Merchant[]>([])
   const [selectedMerchantId, setSelectedMerchantId] = useState('')
@@ -31,9 +33,11 @@ export function RecoveryBatches() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
+    if (!token) return
+
     async function loadMerchants() {
       try {
-        const data = await getMerchants()
+        const data = await getMerchants(token as string)
         setMerchants(data)
         if (data.length > 0) setSelectedMerchantId(data[0].id)
       } catch (err) {
@@ -46,10 +50,10 @@ export function RecoveryBatches() {
     }
 
     loadMerchants()
-  }, [])
+  }, [token])
 
   useEffect(() => {
-    if (!batch || batch.status !== 'RUNNING' || batch.isComplete) {
+    if (!batch || batch.status !== 'RUNNING' || batch.isComplete || !token) {
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
@@ -59,7 +63,7 @@ export function RecoveryBatches() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const updated = await getBatchStatus(batch.batchId)
+        const updated = await getBatchStatus(token, batch.batchId)
         setBatch(updated)
       } catch {
         // transient poll failure — next tick retries
@@ -72,15 +76,15 @@ export function RecoveryBatches() {
         pollRef.current = null
       }
     }
-  }, [batch])
+  }, [batch, token])
 
   async function handleDetect() {
-    if (!selectedMerchantId) return
+    if (!selectedMerchantId || !token) return
 
     try {
       setError(null)
       setDetecting(true)
-      const result = await detectBatch(selectedMerchantId, limitPerType)
+      const result = await detectBatch(token, selectedMerchantId, limitPerType)
       setBatch(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Batch detection failed.')
@@ -90,13 +94,13 @@ export function RecoveryBatches() {
   }
 
   async function handleRun() {
-    if (!batch) return
+    if (!batch || !token) return
 
     try {
       setError(null)
       setRunning(true)
-      await runBatch(batch.batchId)
-      const updated = await getBatchStatus(batch.batchId)
+      await runBatch(token, batch.batchId)
+      const updated = await getBatchStatus(token, batch.batchId)
       setBatch(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Batch run failed.')

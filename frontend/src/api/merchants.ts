@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 export interface Merchant {
   id: string
@@ -11,8 +11,10 @@ export interface MerchantProfile extends Merchant {
   createdAt: string
 }
 
-export async function getMerchants(): Promise<Merchant[]> {
-  const response = await fetch(`${API_BASE_URL}/merchants`)
+export async function getMerchants(token: string): Promise<Merchant[]> {
+  const response = await fetch(`${API_BASE_URL}/merchants`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
 
   if (!response.ok) {
     throw new Error(`Merchants request failed: ${response.status}`)

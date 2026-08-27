@@ -1,8 +1,10 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { RazorpayService } from './razorpay.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 
 @Controller('razorpay')
+@UseGuards(JwtAuthGuard)
 export class RazorpayController {
   constructor(
     private readonly razorpayService: RazorpayService,

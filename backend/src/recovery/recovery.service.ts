@@ -1,6 +1,10 @@
 // RecoveryService is Database Orchestration
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
@@ -593,5 +597,33 @@ export class RecoveryService {
       shouldRetry: attemptsRemaining > 0,
       shouldStop: attemptsRemaining === 0,
     };
+  }
+
+  /**
+   * Browser-facing entry point for "Run Full Agent Recovery". The agent
+   * service itself has no auth of its own and isn't publicly reachable in
+   * production (see deployment plan) — this is the one door a merchant's
+   * JWT can walk through to trigger it, mirroring what
+   * RecoveryQueueProcessor already does for the batch path.
+   */
+  async runAgent(recoveryCaseId: string) {
+    const agentServiceUrl =
+      process.env.AGENT_SERVICE_URL ?? 'http://localhost:8001';
+
+    const response = await fetch(`${agentServiceUrl}/run-recovery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recovery_case_id: recoveryCaseId }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      throw new InternalServerErrorException(
+        `Agent recovery request failed: ${response.status} ${errorBody}`,
+      );
+    }
+
+    return response.json();
   }
 }

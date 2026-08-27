@@ -20,6 +20,28 @@ import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.modul
 import { MerchantsModule } from './merchants/merchants.module';
 import { AuthModule } from './auth/auth.module';
 
+/**
+ * Local dev has no REDIS_URL and just talks to the Redis container on
+ * localhost. A managed Redis (e.g. Upstash) hands out a rediss:// URL,
+ * which BullMQ's ioredis connection needs `tls: {}` to actually use.
+ */
+function buildRedisConnection() {
+  const redisUrl = process.env.REDIS_URL;
+
+  if (!redisUrl) {
+    return { host: 'localhost', port: 6379 };
+  }
+
+  const url = new URL(redisUrl);
+
+  return {
+    host: url.hostname,
+    port: Number(url.port),
+    username: url.username || undefined,
+    password: url.password || undefined,
+    tls: url.protocol === 'rediss:' ? {} : undefined,
+  };
+}
 
 @Module({
   imports: [
@@ -27,10 +49,7 @@ import { AuthModule } from './auth/auth.module';
     AuditModule,
 
     BullModule.forRoot({
-      connection: {
-        host: 'localhost',
-        port: 6379,
-      },
+      connection: buildRedisConnection(),
     }),
 
     PaymentsModule,

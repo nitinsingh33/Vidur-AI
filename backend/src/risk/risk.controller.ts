@@ -3,10 +3,13 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { RiskService } from './risk.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('risk')
+@UseGuards(JwtAuthGuard)
 export class RiskController {
   constructor(
     private readonly riskService: RiskService,

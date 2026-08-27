@@ -10,6 +10,14 @@ from .state import RecoveryAgentState
 FASTAPI_URL = config.ML_SERVICE_URL
 NESTJS_URL = config.BACKEND_URL
 
+# Presented to the backend's agent-facing endpoints (recovery cases, policy
+# checks, escalation) since this service has no merchant login of its own.
+NESTJS_AUTH_HEADERS = (
+    {"x-agent-token": config.AGENT_SERVICE_TOKEN}
+    if config.AGENT_SERVICE_TOKEN
+    else {}
+)
+
 
 def load_recovery_case(
     state: RecoveryAgentState,
@@ -18,6 +26,7 @@ def load_recovery_case(
 
     response = requests.get(
         f"{NESTJS_URL}/recovery/cases/{recovery_case_id}",
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 
@@ -64,31 +73,43 @@ def analyze_context(
 def get_recovery_probability(
     state: RecoveryAgentState,
 ) -> RecoveryAgentState:
+    """
+    Best-effort, like the LLM diagnosis step: strategy selection does not
+    read recovery_probability, so an ML outage must never block the
+    deterministic strategy/policy/execution path — only degrade the context
+    passed to diagnose_case.
+    """
     recovery_case_id = state["recovery_case_id"]
+    recovery_probability = None
 
-    features_response = requests.get(
-        f"{NESTJS_URL}/recovery/cases/"
-        f"{recovery_case_id}/ml-features",
-        timeout=10,
-    )
+    try:
+        features_response = requests.get(
+            f"{NESTJS_URL}/recovery/cases/"
+            f"{recovery_case_id}/ml-features",
+            headers=NESTJS_AUTH_HEADERS,
+            timeout=10,
+        )
+        features_response.raise_for_status()
 
-    features_response.raise_for_status()
+        prediction_response = requests.post(
+            f"{FASTAPI_URL}/predict-recovery",
+            json=features_response.json(),
+            timeout=10,
+        )
+        prediction_response.raise_for_status()
 
-    prediction_response = requests.post(
-        f"{FASTAPI_URL}/predict-recovery",
-        json=features_response.json(),
-        timeout=10,
-    )
-
-    prediction_response.raise_for_status()
-
-    prediction = prediction_response.json()
+        prediction = prediction_response.json()
+        recovery_probability = float(
+            prediction["recovery_probability"]
+        )
+    except requests.RequestException as error:
+        print(
+            f"[ml] recovery probability unavailable, continuing without it: {error}"
+        )
 
     return {
         **state,
-        "recovery_probability": float(
-            prediction["recovery_probability"]
-        ),
+        "recovery_probability": recovery_probability,
     }
 
 
@@ -100,6 +121,7 @@ def select_intervention(
     response = requests.post(
         f"{NESTJS_URL}/recovery/cases/"
         f"{recovery_case_id}/strategy",
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 
@@ -143,6 +165,7 @@ def diagnose_case(
                 f"{NESTJS_URL}/recovery/cases/"
                 f"{recovery_case_id}/diagnosis",
                 json={"reasoning": reasoning},
+                headers=NESTJS_AUTH_HEADERS,
                 timeout=10,
             )
         except requests.RequestException as error:
@@ -163,6 +186,7 @@ def policy_check(
     response = requests.post(
         f"{NESTJS_URL}/policies/check/"
         f"{recovery_case_id}/{candidate_intervention}",
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 
@@ -193,6 +217,7 @@ def execute(
     response = requests.post(
         f"{NESTJS_URL}/recovery/cases/"
         f"{recovery_case_id}/execute",
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 
@@ -213,6 +238,7 @@ def observe(
     response = requests.post(
         f"{NESTJS_URL}/recovery/cases/"
         f"{recovery_case_id}/observe",
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 
@@ -268,6 +294,7 @@ def escalate(
     response = requests.post(
         f"{NESTJS_URL}/escalation/cases/{recovery_case_id}",
         json={"reason": reason},
+        headers=NESTJS_AUTH_HEADERS,
         timeout=10,
     )
 

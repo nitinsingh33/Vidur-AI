@@ -1,7 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 
-const AGENT_SERVICE_URL = 'http://localhost:8001';
+const AGENT_SERVICE_URL =
+  process.env.AGENT_SERVICE_URL ?? 'http://localhost:8001';
 
 @Processor('recovery')
 export class RecoveryQueueProcessor extends WorkerHost {

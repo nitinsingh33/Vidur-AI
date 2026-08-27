@@ -10,6 +10,7 @@ import {
 import type { Request } from 'express';
 
 import { AuthenticatedUser, JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AgentOrJwtGuard } from '../auth/agent-or-jwt.guard';
 import { PolicyService } from './policy.service';
 
 @Controller('policies')
@@ -25,6 +26,7 @@ export class PolicyController {
   }
 
   @Post('check/:recoveryCaseId/:actionType')
+  @UseGuards(AgentOrJwtGuard)
   checkPolicy(
     @Param(
       'recoveryCaseId',

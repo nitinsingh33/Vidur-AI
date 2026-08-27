@@ -9,6 +9,7 @@ export class MerchantsController {
   constructor(private readonly merchantsService: MerchantsService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   findAll() {
     return this.merchantsService.findAll();
   }

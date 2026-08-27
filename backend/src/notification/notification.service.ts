@@ -28,7 +28,7 @@ export class NotificationService {
     const { data, error } =
       await this.resend.emails.send({
         from: 'RecoverAI <onboarding@resend.dev>',
-        to: 'nitinsingh.iitp@gmail.com',
+        to,
         subject,
         text: message,
       });

@@ -5,8 +5,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 
+import { AgentOrJwtGuard } from '../auth/agent-or-jwt.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RecoveryService } from './recovery.service';
 
 @Controller('recovery')
@@ -16,6 +19,7 @@ export class RecoveryController {
   ) {}
 
   @Get('cases/:recoveryCaseId')
+  @UseGuards(AgentOrJwtGuard)
   getCase(
     @Param(
       'recoveryCaseId',
@@ -29,6 +33,7 @@ export class RecoveryController {
   }
 
   @Get('cases/:recoveryCaseId/ml-features')
+  @UseGuards(AgentOrJwtGuard)
   getMlFeatures(
     @Param(
       'recoveryCaseId',
@@ -42,6 +47,7 @@ export class RecoveryController {
   }
 
   @Post('cases/:recoveryCaseId/diagnosis')
+  @UseGuards(AgentOrJwtGuard)
   recordDiagnosis(
     @Param(
       'recoveryCaseId',
@@ -60,6 +66,7 @@ export class RecoveryController {
   }
 
   @Post('cases/:recoveryCaseId/strategy')
+  @UseGuards(AgentOrJwtGuard)
   createStrategy(
     @Param(
       'recoveryCaseId',
@@ -73,6 +80,7 @@ export class RecoveryController {
   }
 
   @Post('cases/:recoveryCaseId/execute')
+  @UseGuards(AgentOrJwtGuard)
   executeRecoveryAction(
     @Param(
       'recoveryCaseId',
@@ -86,6 +94,7 @@ export class RecoveryController {
   }
 
   @Post('cases/:recoveryCaseId/observe')
+  @UseGuards(AgentOrJwtGuard)
   observeRecovery(
     @Param(
       'recoveryCaseId',
@@ -94,6 +103,20 @@ export class RecoveryController {
     recoveryCaseId: string,
   ) {
     return this.recoveryService.observeRecovery(
+      recoveryCaseId,
+    );
+  }
+
+  @Post('cases/:recoveryCaseId/run-agent')
+  @UseGuards(JwtAuthGuard)
+  runAgent(
+    @Param(
+      'recoveryCaseId',
+      new ParseUUIDPipe(),
+    )
+    recoveryCaseId: string,
+  ) {
+    return this.recoveryService.runAgent(
       recoveryCaseId,
     );
   }

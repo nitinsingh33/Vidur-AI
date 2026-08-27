@@ -7,11 +7,14 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('payments')
+@UseGuards(JwtAuthGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 

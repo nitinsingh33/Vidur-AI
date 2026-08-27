@@ -8,6 +8,7 @@ import {
 import { VidurRecoveryPanel } from '../components/recovery/VidurRecoveryPanel'
 import { StatusBadge } from '../components/ui/status-badge'
 import { Skeleton } from '../components/ui/skeleton'
+import { useAuth } from '../context/AuthContext'
 import {
   actionStatusTone,
   caseStatusTone,
@@ -26,18 +27,21 @@ function getActionIcon(status: string) {
 export function RecoveryCaseDetails() {
   const { recoveryCaseId } = useParams<{ recoveryCaseId: string }>()
   const navigate = useNavigate()
+  const { token } = useAuth()
   const [recoveryCase, setRecoveryCase] = useState<RecoveryCase | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!token) return
+
     async function loadCase() {
       try {
         setLoading(true)
         setError(null)
         if (!recoveryCaseId) return
 
-        const data = await getRecoveryCase(recoveryCaseId)
+        const data = await getRecoveryCase(token as string, recoveryCaseId)
         setRecoveryCase(data)
       } catch (err) {
         setError(
@@ -49,7 +53,7 @@ export function RecoveryCaseDetails() {
     }
 
     loadCase()
-  }, [recoveryCaseId])
+  }, [recoveryCaseId, token])
 
   if (loading) {
     return (

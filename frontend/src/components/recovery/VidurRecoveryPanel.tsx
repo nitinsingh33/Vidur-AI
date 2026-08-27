@@ -17,6 +17,7 @@ import {
   type RecoveryOutcome,
 } from '../../api/recoveryCases'
 import { Button } from '../ui/button'
+import { useAuth } from '../../context/AuthContext'
 import { formatAmount, formatLabel } from '../../lib/status'
 
 interface VidurRecoveryPanelProps {
@@ -39,6 +40,7 @@ export function VidurRecoveryPanel({
   recoveryCaseId,
   onCompleted,
 }: VidurRecoveryPanelProps) {
+  const { token } = useAuth()
   const [agentResult, setAgentResult] = useState<AgentRecoveryResult | null>(
     null,
   )
@@ -48,10 +50,12 @@ export function VidurRecoveryPanel({
   const [error, setError] = useState<string | null>(null)
 
   async function handleGenerateStrategy() {
+    if (!token) return
+
     try {
       setError(null)
       setState('generating')
-      const result = await createRecoveryStrategy(recoveryCaseId)
+      const result = await createRecoveryStrategy(token, recoveryCaseId)
       setAction(result)
       setState('ready')
     } catch (err) {
@@ -65,10 +69,12 @@ export function VidurRecoveryPanel({
   }
 
   async function handleExecute() {
+    if (!token) return
+
     try {
       setError(null)
       setState('executing')
-      const result = await executeRecoveryAction(recoveryCaseId)
+      const result = await executeRecoveryAction(token, recoveryCaseId)
       setAction(result)
       setState('executed')
     } catch (err) {
@@ -82,10 +88,12 @@ export function VidurRecoveryPanel({
   }
 
   async function handleObserve() {
+    if (!token) return
+
     try {
       setError(null)
       setState('observing')
-      const result = await observeRecovery(recoveryCaseId)
+      const result = await observeRecovery(token, recoveryCaseId)
       setOutcome(result)
       setState('completed')
       onCompleted?.()
@@ -100,10 +108,12 @@ export function VidurRecoveryPanel({
   }
 
   async function handleRunAgent() {
+    if (!token) return
+
     try {
       setError(null)
       setState('agent-running')
-      const result = await runAgentRecovery(recoveryCaseId)
+      const result = await runAgentRecovery(token, recoveryCaseId)
       setAgentResult(result)
 
       if (result.success === true) {

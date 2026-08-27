@@ -55,6 +55,8 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!token) return
+
     async function loadAnalytics() {
       try {
         const [
@@ -69,10 +71,10 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           getRevenueAtRisk(),
           getRevenueRecovered(),
           getAnalyticsSummary(),
-          getRecoveryCases({ limit: 5 }),
-          getRecoveryCases({ riskLevel: 'CRITICAL', limit: 5 }),
-          getRecoveryCases({ status: 'ESCALATED', limit: 5 }),
-          token ? getAuditLog(token, 1, 5) : Promise.resolve(null),
+          getRecoveryCases(token as string, { limit: 5 }),
+          getRecoveryCases(token as string, { riskLevel: 'CRITICAL', limit: 5 }),
+          getRecoveryCases(token as string, { status: 'ESCALATED', limit: 5 }),
+          getAuditLog(token as string, 1, 5),
         ])
 
         setRevenueAtRisk(risk)

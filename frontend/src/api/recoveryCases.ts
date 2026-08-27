@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 export interface RecoveryAction {
   id: string
@@ -85,6 +85,7 @@ export interface GetRecoveryCasesOptions {
 }
 
 export async function getRecoveryCases(
+  token: string,
   options: GetRecoveryCasesOptions = {},
 ): Promise<RecoveryCasesResponse> {
   const { page = 1, limit = 5, status, riskLevel } = options
@@ -98,6 +99,7 @@ export async function getRecoveryCases(
 
   const response = await fetch(
     `${API_BASE_URL}/recovery-cases?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
   )
 
   if (!response.ok) {
@@ -110,10 +112,12 @@ export async function getRecoveryCases(
 }
 
 export async function getRecoveryCase(
+  token: string,
   recoveryCaseId: string,
 ): Promise<RecoveryCase> {
   const response = await fetch(
     `${API_BASE_URL}/recovery-cases/${recoveryCaseId}`,
+    { headers: { Authorization: `Bearer ${token}` } },
   )
 
   if (!response.ok) {
@@ -126,12 +130,14 @@ export async function getRecoveryCase(
 }
 
 export async function createRecoveryStrategy(
+  token: string,
   recoveryCaseId: string,
 ): Promise<RecoveryAction> {
   const response = await fetch(
     `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/strategy`,
     {
       method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
     },
   )
 
@@ -145,12 +151,14 @@ export async function createRecoveryStrategy(
 }
 
 export async function executeRecoveryAction(
+  token: string,
   recoveryCaseId: string,
 ): Promise<RecoveryAction> {
   const response = await fetch(
     `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/execute`,
     {
       method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
     },
   )
 
@@ -164,12 +172,14 @@ export async function executeRecoveryAction(
 }
 
 export async function observeRecovery(
+  token: string,
   recoveryCaseId: string,
 ): Promise<RecoveryOutcome> {
   const response = await fetch(
     `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/observe`,
     {
       method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
     },
   )
 
@@ -189,13 +199,16 @@ export interface AgentRecoveryResult {
 }
 
 export async function runAgentRecovery(
+  token: string,
   recoveryCaseId: string,
 ): Promise<AgentRecoveryResult> {
-  const response = await fetch('http://localhost:8001/run-recovery', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recovery_case_id: recoveryCaseId }),
-  })
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/run-agent`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
 
   if (!response.ok) {
     throw new Error(`Agent recovery failed: ${response.status}`)

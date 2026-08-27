@@ -4,14 +4,17 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   RecoveryCaseStatus,
   RiskLevel,
 } from '../generated/prisma/enums';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RecoveryCasesService } from './recovery-cases.service';
 
 @Controller('recovery-cases')
+@UseGuards(JwtAuthGuard)
 export class RecoveryCasesController {
   constructor(
     private readonly recoveryCasesService: RecoveryCasesService,
