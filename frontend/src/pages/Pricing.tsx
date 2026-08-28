@@ -61,7 +61,7 @@ export function Pricing() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55 }}
             >
-              <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
+              <div className="invisible mx-auto inline-flex items-center gap-2 px-3 py-1.5 text-xs">
                 <Sparkles size={14} />
                 Pricing
               </div>

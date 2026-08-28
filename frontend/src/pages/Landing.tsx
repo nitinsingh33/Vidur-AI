@@ -527,7 +527,7 @@ export function Landing() {
 
       <section
         ref={heroRef}
-        className="relative min-h-[calc(100vh-96px)] overflow-hidden"
+        className="relative -translate-y-12 min-h-[calc(100vh-96px)] overflow-hidden"
       >
         <AnimatedGrid />
 
@@ -549,19 +549,6 @@ export function Landing() {
               opacity: heroOpacity,
             }}
           >
-            <motion.div
-              className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55 }}
-            >
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
-              </span>
-              Intelligent revenue recovery
-            </motion.div>
-
             <motion.h1
               className="mt-7 text-[46px] font-semibold leading-[0.98] tracking-[-0.055em] sm:text-[64px] lg:text-[76px]"
               initial={{ opacity: 0, y: 25 }}
@@ -1019,9 +1006,6 @@ export function Landing() {
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.7 }}
           >
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-              <Sparkles size={20} />
-            </div>
 
             <h2 className="mt-7 text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-6xl">
               Stop treating every
