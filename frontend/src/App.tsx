@@ -21,6 +21,7 @@ import { Dashboard } from './pages/Dashboard'
 import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
 import { CheckoutDropOff } from './pages/CheckoutDropOff'
+import { Receivables } from './pages/Receivables'
 import { AgentActivity } from './pages/AgentActivity'
 import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
@@ -72,6 +73,11 @@ function AppShell() {
               <Route
                 path="/checkout-dropoff"
                 element={<CheckoutDropOff />}
+              />
+
+              <Route
+                path="/receivables"
+                element={<Receivables />}
               />
 
               {/* Agent */}

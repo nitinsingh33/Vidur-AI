@@ -1,11 +1,24 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { InvoicesController } from './invoices.controller';
+import { InvoicesService } from './invoices.service';
+import { InvoiceOverdueSweepService } from './invoice-overdue-sweep.service';
+import { InvoiceOverdueSweepProcessor } from './invoice-overdue-sweep.processor';
+import { RiskModule } from '../risk/risk.module';
+import { AuthModule } from '../auth/auth.module';
 
-/**
- * Placeholder — the real Invoice lifecycle service (create/issue/mark
- * overdue) lands in the B2B Receivables Chaser phase. The synthetic
- * fake-outcome mutator that used to live here has been removed; invoice
- * recovery now goes through RecoveryService's real Razorpay Payment Link
- * mechanism, same as every other channel.
- */
-@Module({})
+@Module({
+  imports: [
+    BullModule.registerQueue({ name: 'invoice-overdue-sweep' }),
+    RiskModule,
+    AuthModule,
+  ],
+  controllers: [InvoicesController],
+  providers: [
+    InvoicesService,
+    InvoiceOverdueSweepService,
+    InvoiceOverdueSweepProcessor,
+  ],
+  exports: [InvoicesService],
+})
 export class InvoicesModule {}

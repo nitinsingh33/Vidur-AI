@@ -64,6 +64,15 @@ const BATCH_STATUS_TONE: Record<string, Tone> = {
   COMPLETED: 'emerald',
 }
 
+const INVOICE_STATUS_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral',
+  ISSUED: 'sky',
+  PARTIALLY_PAID: 'amber',
+  PAID: 'emerald',
+  OVERDUE: 'rose',
+  CANCELLED: 'neutral',
+}
+
 export function toneClasses(tone: Tone) {
   return TONE_CLASSES[tone]
 }
@@ -86,4 +95,8 @@ export function policyTone(decision: string): Tone {
 
 export function batchStatusTone(status: string): Tone {
   return BATCH_STATUS_TONE[status] ?? 'neutral'
+}
+
+export function invoiceStatusTone(status: string): Tone {
+  return INVOICE_STATUS_TONE[status] ?? 'neutral'
 }
