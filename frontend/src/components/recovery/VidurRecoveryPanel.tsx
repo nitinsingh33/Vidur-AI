@@ -1,19 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
+  Ban,
   Bot,
   CheckCircle2,
   Loader2,
   Play,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Zap,
 } from 'lucide-react'
 import {
+  approveRecoveryAction,
   createRecoveryStrategy,
   executeRecoveryAction,
   getRecoveryCase,
   observeRecovery,
+  rejectRecoveryAction,
   runAgentRecovery,
   type AgentRecoveryResult,
   type RecoveryAction,
@@ -48,9 +52,13 @@ export function VidurRecoveryPanel({
   recoveryCase,
   onCompleted,
 }: VidurRecoveryPanelProps) {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
 
   const [state, setState] = useState<PanelState>('idle')
+  const [approvalBusy, setApprovalBusy] = useState<'approve' | 'reject' | null>(
+    null,
+  )
+  const [approvalError, setApprovalError] = useState<string | null>(null)
   const [action, setAction] = useState<RecoveryAction | null>(null)
   const [outcome, setOutcome] = useState<RecoveryOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -202,6 +210,33 @@ export function VidurRecoveryPanel({
     }
   }
 
+  const pendingApproval = caseSnapshot.actions.find(
+    (item) => item.status === 'PENDING' && item.policyDecision === 'REQUIRE_APPROVAL',
+  )
+  const canApprove = user?.role === 'ADMIN' || user?.role === 'FINANCE_MANAGER'
+
+  async function handleApproval(decision: 'approve' | 'reject') {
+    if (!token || !pendingApproval) return
+
+    try {
+      setApprovalError(null)
+      setApprovalBusy(decision)
+
+      if (decision === 'approve') {
+        await approveRecoveryAction(token, recoveryCase.id, pendingApproval.id)
+      } else {
+        await rejectRecoveryAction(token, recoveryCase.id, pendingApproval.id)
+      }
+
+      onCompleted?.()
+    } catch (err) {
+      setApprovalError(
+        err instanceof Error ? err.message : 'Unable to record the decision.',
+      )
+      setApprovalBusy(null)
+    }
+  }
+
   const actionLabel = action?.type
     ? formatLabel(action.type)
     : 'Recovery action'
@@ -257,6 +292,71 @@ export function VidurRecoveryPanel({
       </header>
 
       <div className="p-5 sm:p-6">
+        {pendingApproval && (
+          <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <ShieldAlert size={18} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-600 dark:text-amber-400">
+                  Awaiting human approval
+                </p>
+
+                <h3 className="mt-1 text-base font-semibold text-foreground">
+                  {formatLabel(pendingApproval.type)}
+                </h3>
+
+                {pendingApproval.reason && (
+                  <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {pendingApproval.reason}
+                  </p>
+                )}
+
+                {canApprove ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => handleApproval('approve')}
+                      disabled={approvalBusy !== null}
+                    >
+                      {approvalBusy === 'approve' ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={15} />
+                      )}
+                      Approve
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleApproval('reject')}
+                      disabled={approvalBusy !== null}
+                    >
+                      {approvalBusy === 'reject' ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Ban size={15} />
+                      )}
+                      Reject
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Only an admin or finance manager can approve or reject this
+                    action.
+                  </p>
+                )}
+
+                {approvalError && (
+                  <p className="mt-3 text-sm text-destructive">
+                    {approvalError}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {state === 'idle' && (
           <div className="grid gap-4 lg:grid-cols-[1fr_1.15fr]">
             <div className="rounded-2xl border border-border bg-secondary/20 p-5">

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { CustomersModule } from './customers/customers.module'
+import { CustomersModule } from './customers/customers.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RecoveryCasesModule } from './recovery-cases/recovery-cases.module';
@@ -20,6 +20,7 @@ import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.modul
 import { MerchantsModule } from './merchants/merchants.module';
 import { AuthModule } from './auth/auth.module';
 import { DemoModule } from './demo/demo.module';
+import { CheckoutSweepModule } from './checkout-sweep/checkout-sweep.module';
 
 /**
  * Local dev has no REDIS_URL and just talks to the Redis container on
@@ -69,6 +70,7 @@ function buildRedisConnection() {
     MerchantsModule,
     AuthModule,
     DemoModule,
+    CheckoutSweepModule,
   ],
   controllers: [AppController],
   providers: [AppService],

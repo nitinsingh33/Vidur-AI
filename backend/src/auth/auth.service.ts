@@ -22,11 +22,17 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  private issueToken(user: { id: string; merchantId: string; email: string }) {
+  private issueToken(user: {
+    id: string;
+    merchantId: string;
+    email: string;
+    role: string;
+  }) {
     return this.jwtService.sign({
       sub: user.id,
       merchantId: user.merchantId,
       email: user.email,
+      role: user.role,
     });
   }
 
@@ -42,6 +48,7 @@ export class AuthService {
         id: user.id,
         merchantId: user.merchant.id,
         email: user.email,
+        role: user.role,
       }),
       user: {
         id: user.id,

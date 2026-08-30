@@ -345,6 +345,15 @@ export function DemoDetection() {
         </Button>
       </header>
 
+      {lastReset && (
+        <div className="mt-4 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+          Cleared {lastReset.paymentsDeleted} payment
+          {lastReset.paymentsDeleted === 1 ? '' : 's'} and{' '}
+          {lastReset.recoveryCasesDeleted} recovery case
+          {lastReset.recoveryCasesDeleted === 1 ? '' : 's'}.
+        </div>
+      )}
+
       {liveError && (
         <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {liveError}

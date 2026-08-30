@@ -66,21 +66,33 @@ export function RecoveryCasesTable({
                     <td className="px-5 py-3.5">
                       <div className="flex flex-col">
                         <span className="font-medium text-foreground">
-                          {recoveryCase.customer.name}
+                          {recoveryCase.customer?.name ?? 'Unknown customer'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {recoveryCase.customer.email}
+                          {recoveryCase.customer?.email ?? 'No contact info'}
                         </span>
                       </div>
                     </td>
 
                     <td className="px-3 py-3.5 text-muted-foreground">
-                      {recoveryCase.payment
-                        ? formatAmount(
-                            recoveryCase.payment.amount,
-                            recoveryCase.payment.currency,
-                          )
-                        : '—'}
+                      {recoveryCase.payment ? (
+                        formatAmount(
+                          recoveryCase.payment.amount,
+                          recoveryCase.payment.currency,
+                        )
+                      ) : recoveryCase.order ? (
+                        <span>
+                          {formatAmount(
+                            recoveryCase.order.amount,
+                            recoveryCase.order.currency,
+                          )}
+                          <span className="ml-1 text-xs text-muted-foreground/70">
+                            (checkout)
+                          </span>
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </td>
 
                     <td className="px-3 py-3.5 text-muted-foreground">

@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
-import { getPolicies, type Policy } from '../api/policies'
+import { getPolicies, updatePolicyDecision, type Policy } from '../api/policies'
 import { Skeleton } from '../components/ui/skeleton'
 import { StatusBadge } from '../components/ui/status-badge'
 import { useAuth } from '../context/AuthContext'
 import { formatAmount, formatLabel, policyTone } from '../lib/status'
 
+const DECISIONS = ['ALLOW', 'BLOCK', 'REQUIRE_APPROVAL'] as const
+
 export function Policies() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
+  const canEdit = user?.role === 'ADMIN'
 
   const [policies, setPolicies] = useState<Policy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -33,6 +37,25 @@ export function Policies() {
 
     load()
   }, [token])
+
+  async function handleDecisionChange(policyId: string, decision: string) {
+    if (!token) return
+
+    try {
+      setSavingId(policyId)
+      setError(null)
+      const updated = await updatePolicyDecision(token, policyId, decision)
+      setPolicies((current) =>
+        current.map((policy) => (policy.id === policyId ? updated : policy)),
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to update the policy.',
+      )
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   return (
     <section className="pb-12">
@@ -131,10 +154,27 @@ export function Policies() {
                     )}
                   </div>
 
-                  <StatusBadge
-                    label={policy.decision}
-                    tone={policyTone(policy.decision)}
-                  />
+                  {canEdit ? (
+                    <select
+                      className="h-8 shrink-0 rounded-lg border border-border bg-card px-2 text-xs font-medium text-foreground disabled:opacity-60"
+                      value={policy.decision}
+                      disabled={savingId === policy.id}
+                      onChange={(event) =>
+                        handleDecisionChange(policy.id, event.target.value)
+                      }
+                    >
+                      {DECISIONS.map((decision) => (
+                        <option key={decision} value={decision}>
+                          {formatLabel(decision)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <StatusBadge
+                      label={policy.decision}
+                      tone={policyTone(policy.decision)}
+                    />
+                  )}
                 </div>
 
                 {limits.length > 0 && (

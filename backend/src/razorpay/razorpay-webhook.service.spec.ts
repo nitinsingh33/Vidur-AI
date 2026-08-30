@@ -22,6 +22,7 @@ describe('RazorpayWebhookService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
+      findFirst: jest.fn(),
     },
     customer: {
       upsert: jest.fn(),
@@ -37,6 +38,8 @@ describe('RazorpayWebhookService', () => {
     },
     recoveryCase: {
       update: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
     order: {
       update: jest.fn(),
@@ -52,6 +55,7 @@ describe('RazorpayWebhookService', () => {
   const razorpayService = {
     verifyWebhookSignature: jest.fn(),
     getOrder: jest.fn(),
+    findInternalOrderByExternalId: jest.fn().mockResolvedValue(null),
   } as unknown as RazorpayService;
 
   const paymentsService = {
@@ -108,22 +112,18 @@ describe('RazorpayWebhookService', () => {
     );
 
     await expect(
-      service.handleWebhook(
-        signedBody(validPayload),
-        'bad-signature',
-        'evt-1',
-      ),
+      service.handleWebhook(signedBody(validPayload), 'bad-signature', 'evt-1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
     expect(paymentsService.create).not.toHaveBeenCalled();
     expect(riskService.assessPayment).not.toHaveBeenCalled();
   });
 
-  it('acknowledges but does not process events other than payment.failed', async () => {
+  it('acknowledges but does not process an event outside the handled set', async () => {
     (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(true);
 
     const result = await service.handleWebhook(
-      signedBody({ event: 'payment.captured', payload: {} }),
+      signedBody({ event: 'refund.processed', payload: {} }),
       'valid-signature',
       'evt-1',
     );
@@ -132,7 +132,7 @@ describe('RazorpayWebhookService', () => {
       expect.objectContaining({
         received: true,
         processed: false,
-        event: 'payment.captured',
+        event: 'refund.processed',
       }),
     );
     expect(paymentsService.create).not.toHaveBeenCalled();
@@ -337,30 +337,42 @@ describe('RazorpayWebhookService', () => {
       event: 'payment_link.paid',
       payload: {
         payment_link: {
-          entity: { id: 'plink_test123', status: 'paid', short_url: 'https://rzp.io/i/abc' },
+          entity: {
+            id: 'plink_test123',
+            status: 'paid',
+            short_url: 'https://rzp.io/i/abc',
+          },
         },
         payment: {
-          entity: { id: 'pay_link_test123', status: 'captured', amount: 2500000 },
+          entity: {
+            id: 'pay_link_test123',
+            status: 'captured',
+            amount: 2500000,
+          },
         },
       },
     };
 
     it('captures the underlying payment and records a real recovery outcome', async () => {
-      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(true);
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
       (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue({
         id: 'action-1',
-        recoveryCase: {
-          id: 'case-1',
-          merchantId: 'merchant-1',
-          customerId: 'customer-1',
-          orderId: null,
-          invoiceId: null,
-          status: 'IN_PROGRESS',
-          outcome: null,
-          payment: { id: 'payment-1', amount: '25000', orderId: null },
-          order: null,
-          invoice: null,
-        },
+        recoveryCaseId: 'case-1',
+        type: 'SEND_PAYMENT_LINK',
+      });
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+        merchantId: 'merchant-1',
+        customerId: 'customer-1',
+        orderId: null,
+        invoiceId: null,
+        status: 'IN_PROGRESS',
+        outcome: null,
+        payment: { id: 'payment-1', amount: '25000', orderId: null },
+        order: null,
+        invoice: null,
       });
 
       const result = await service.handleWebhook(
@@ -381,6 +393,7 @@ describe('RazorpayWebhookService', () => {
             recoveryCaseId: 'case-1',
             recoveredAmount: 25000,
             successful: true,
+            recoveryMethod: 'SEND_PAYMENT_LINK',
           }),
         }),
       );
@@ -401,7 +414,9 @@ describe('RazorpayWebhookService', () => {
     });
 
     it('acknowledges without processing an unrecognized payment link', async () => {
-      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(true);
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
       (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await service.handleWebhook(
@@ -417,17 +432,21 @@ describe('RazorpayWebhookService', () => {
     });
 
     it('is idempotent: a duplicate payment_link.paid for an already-recovered case is acknowledged without double-processing', async () => {
-      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(true);
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
       (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue({
         id: 'action-1',
-        recoveryCase: {
-          id: 'case-1',
-          status: 'RECOVERED',
-          outcome: { id: 'outcome-1' },
-          payment: null,
-          order: null,
-          invoice: null,
-        },
+        recoveryCaseId: 'case-1',
+        type: 'SEND_PAYMENT_LINK',
+      });
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+        status: 'RECOVERED',
+        outcome: { id: 'outcome-1' },
+        payment: null,
+        order: null,
+        invoice: null,
       });
 
       const result = await service.handleWebhook(
@@ -445,6 +464,154 @@ describe('RazorpayWebhookService', () => {
           duplicate: true,
           recoveryCaseId: 'case-1',
         }),
+      );
+    });
+  });
+
+  describe('payment.captured', () => {
+    const capturedPayload = {
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_captured_1',
+            order_id: 'order_test123',
+            amount: 2500000,
+            currency: 'INR',
+            method: 'card',
+            email: 'customer@example.com',
+            notes: { merchantId: 'merchant-1' },
+          },
+        },
+      },
+    };
+
+    it('records a direct/self-recovered payment and closes the matching open case', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalOrderByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'internal-order-1', status: 'CREATED' });
+      (prisma.payment.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.customer.upsert as jest.Mock).mockResolvedValue({
+        id: 'customer-1',
+      });
+      (paymentsService.create as jest.Mock).mockResolvedValue({
+        id: 'payment-captured-1',
+      });
+      (prisma.recoveryCase.findFirst as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+      });
+      (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+        merchantId: 'merchant-1',
+        status: 'ELIGIBLE',
+        outcome: null,
+        payment: null,
+        order: { amount: '25000', currency: 'INR' },
+        invoice: null,
+        orderId: 'internal-order-1',
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(capturedPayload),
+        'valid-signature',
+        'evt-cap-1',
+      );
+
+      expect(paymentsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'CAPTURED',
+          orderId: 'internal-order-1',
+        }),
+      );
+      expect(prisma.recoveryOutcome.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recoveryMethod: null,
+            successful: true,
+          }),
+        }),
+      );
+      expect(result).toEqual(expect.objectContaining({ processed: true }));
+    });
+
+    it('attributes the outcome to the originating action when the payment carries a recoveryCaseId note', async () => {
+      const payloadWithCaseNote = {
+        event: 'payment.captured',
+        payload: {
+          payment: {
+            entity: {
+              ...capturedPayload.payload.payment.entity,
+              notes: { merchantId: 'merchant-1', recoveryCaseId: 'case-noted' },
+            },
+          },
+        },
+      };
+
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalOrderByExternalId as jest.Mock
+      ).mockResolvedValue(null);
+      (prisma.payment.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.customer.upsert as jest.Mock).mockResolvedValue({
+        id: 'customer-1',
+      });
+      (paymentsService.create as jest.Mock).mockResolvedValue({
+        id: 'payment-captured-2',
+      });
+      (prisma.recoveryCase.findUnique as jest.Mock)
+        .mockResolvedValueOnce({ id: 'case-noted' }) // noted-case existence check
+        .mockResolvedValueOnce({
+          id: 'case-noted',
+          merchantId: 'merchant-1',
+          status: 'IN_PROGRESS',
+          outcome: null,
+          payment: { id: 'payment-1', amount: '25000', orderId: null },
+          order: null,
+          invoice: null,
+        }); // closeRecoveryCase's own fetch
+      (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue({
+        type: 'RETRY_PAYMENT',
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(payloadWithCaseNote),
+        'valid-signature',
+        'evt-cap-2',
+      );
+
+      expect(prisma.recoveryOutcome.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ recoveryMethod: 'RETRY_PAYMENT' }),
+        }),
+      );
+      expect(result).toEqual(expect.objectContaining({ processed: true }));
+    });
+
+    it('is idempotent for an already-captured payment', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (prisma.payment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'payment-existing',
+        status: 'CAPTURED',
+        orderId: null,
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(capturedPayload),
+        'valid-signature',
+        'evt-cap-3',
+      );
+
+      expect(paymentsService.create).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({ processed: false, duplicate: true }),
       );
     });
   });

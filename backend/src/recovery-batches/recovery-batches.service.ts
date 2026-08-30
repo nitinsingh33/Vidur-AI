@@ -8,6 +8,7 @@ import {
   TERMINAL_RECOVERY_CASE_STATUSES,
 } from '../recovery/recovery-case-status.util';
 import { RecoveryCaseStatus } from '../generated/prisma/enums';
+import { getCheckoutAbandonmentCutoff } from '../risk/checkout-abandonment.util';
 
 const RUNNABLE_CASE_STATUSES: RecoveryCaseStatus[] = [
   RecoveryCaseStatus.OPEN,
@@ -50,6 +51,15 @@ export class RecoveryBatchesService {
         this.prisma.order.findMany({
           where: {
             merchantId,
+            status: 'CREATED',
+            /*
+             * A brand-new order isn't "abandoned" — the customer may still
+             * be mid-checkout. Only flag it once it's sat unpaid past the
+             * same grace period the scheduled sweep uses (see
+             * CheckoutSweepService), so a manual "Detect batch" click can't
+             * flag an order the instant it's created.
+             */
+            createdAt: { lte: getCheckoutAbandonmentCutoff() },
             payments: { none: {} },
             recoveryCases: {
               none: { status: { in: ACTIVE_RECOVERY_CASE_STATUSES } },

@@ -177,6 +177,10 @@ model Order {
   id         String      @id @default(uuid())
   merchantId String
   customerId String?
+  /// Razorpay order id (e.g. order_...) for the order created via
+  /// /razorpay/checkout. Lets webhooks (payment.failed, payment.captured,
+  /// order.paid) find their way back to this internal Order row.
+  externalId String?
   amount     Decimal     @db.Decimal(18, 2)
   currency   String      @default("INR")
   status     OrderStatus @default(CREATED)
@@ -188,9 +192,11 @@ model Order {
   payments Payment[]
   recoveryCases RecoveryCase[]
 
+  @@unique([merchantId, externalId])
   @@index([merchantId])
   @@index([customerId])
   @@index([status])
+  @@index([externalId])
 }
 
 model Payment {

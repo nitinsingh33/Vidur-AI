@@ -61,9 +61,7 @@ export class RiskService {
     });
 
     if (!payment) {
-      throw new NotFoundException(
-        `Payment ${paymentId} not found.`,
-      );
+      throw new NotFoundException(`Payment ${paymentId} not found.`);
     }
 
     if (payment.status !== PaymentStatus.FAILED) {
@@ -72,13 +70,12 @@ export class RiskService {
       );
     }
 
-    const existingCase =
-      await this.prisma.recoveryCase.findFirst({
-        where: {
-          paymentId: payment.id,
-          status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
-        },
-      });
+    const existingCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        paymentId: payment.id,
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+      },
+    });
 
     if (existingCase) {
       return existingCase;
@@ -94,27 +91,24 @@ export class RiskService {
       failedPaymentCount,
     });
 
-    const recoveryCase =
-      await this.prisma.recoveryCase.create({
-        data: {
-          merchantId: payment.merchantId,
-          customerId: payment.customerId,
-          paymentId: payment.id,
-          status: RecoveryCaseStatus.ELIGIBLE,
-          riskLevel: assessment.riskLevel,
-          revenueAtRisk: assessment.revenueAtRisk,
-          recoveryProbability:
-            assessment.recoveryProbability,
-          rootCause:
-            payment.failureReason ?? 'PAYMENT_FAILED',
-        },
-        include: {
-          customer: true,
-          payment: true,
-          actions: true,
-          outcome: true,
-        },
-      });
+    const recoveryCase = await this.prisma.recoveryCase.create({
+      data: {
+        merchantId: payment.merchantId,
+        customerId: payment.customerId,
+        paymentId: payment.id,
+        status: RecoveryCaseStatus.ELIGIBLE,
+        riskLevel: assessment.riskLevel,
+        revenueAtRisk: assessment.revenueAtRisk,
+        recoveryProbability: assessment.recoveryProbability,
+        rootCause: payment.failureReason ?? 'PAYMENT_FAILED',
+      },
+      include: {
+        customer: true,
+        payment: true,
+        actions: true,
+        outcome: true,
+      },
+    });
 
     await this.auditService.record({
       merchantId: recoveryCase.merchantId,
@@ -147,12 +141,15 @@ export class RiskService {
       throw new NotFoundException(`Order ${orderId} not found.`);
     }
 
-    if (!order.customerId) {
-      throw new BadRequestException(
-        `Order ${orderId} has no customer to recover.`,
-      );
-    }
-
+    /*
+     * A genuinely abandoned checkout — no payment attempt at all — often
+     * has no customer identity: Razorpay only learns who the customer is
+     * once they interact with the payment form (even a failed attempt
+     * carries email/contact). Revenue is still at risk, so the case still
+     * opens; every downstream contact channel already handles a
+     * customer-less case as "can't reach them" rather than crashing (see
+     * RecoveryService.createAndSendPaymentLink / sendRecoveryEmail).
+     */
     const existingPayment = await this.prisma.payment.findFirst({
       where: { orderId: order.id },
     });

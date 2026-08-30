@@ -252,39 +252,46 @@ export function RecoveryCaseDetails() {
             </div>
           </header>
 
-          <dl className="divide-y divide-border">
-            <div className="flex items-center justify-between gap-5 px-5 py-4">
-              <dt className="flex items-center gap-2 text-xs text-muted-foreground">
-                <UserRound size={13} />
-                Name
-              </dt>
-              <dd className="text-right text-sm font-medium text-foreground">
-                {recoveryCase.customer.name}
-              </dd>
-            </div>
-
-            <div className="flex items-center justify-between gap-5 px-5 py-4">
-              <dt className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Mail size={13} />
-                Email
-              </dt>
-              <dd className="max-w-[65%] truncate text-right text-sm font-medium text-foreground">
-                {recoveryCase.customer.email}
-              </dd>
-            </div>
-
-            {recoveryCase.customer.phone && (
+          {recoveryCase.customer ? (
+            <dl className="divide-y divide-border">
               <div className="flex items-center justify-between gap-5 px-5 py-4">
                 <dt className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Phone size={13} />
-                  Phone
+                  <UserRound size={13} />
+                  Name
                 </dt>
                 <dd className="text-right text-sm font-medium text-foreground">
-                  {recoveryCase.customer.phone}
+                  {recoveryCase.customer.name}
                 </dd>
               </div>
-            )}
-          </dl>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-4">
+                <dt className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Mail size={13} />
+                  Email
+                </dt>
+                <dd className="max-w-[65%] truncate text-right text-sm font-medium text-foreground">
+                  {recoveryCase.customer.email}
+                </dd>
+              </div>
+
+              {recoveryCase.customer.phone && (
+                <div className="flex items-center justify-between gap-5 px-5 py-4">
+                  <dt className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Phone size={13} />
+                    Phone
+                  </dt>
+                  <dd className="text-right text-sm font-medium text-foreground">
+                    {recoveryCase.customer.phone}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="p-5 text-sm text-muted-foreground">
+              No customer identity captured — this checkout was abandoned
+              before Razorpay recorded any contact details.
+            </p>
+          )}
         </article>
 
         <article className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -344,6 +351,38 @@ export function RecoveryCaseDetails() {
                 <dt className="text-xs text-muted-foreground">Attempt</dt>
                 <dd className="font-mono text-xs font-medium text-foreground">
                   #{recoveryCase.payment.attemptNumber}
+                </dd>
+              </div>
+            </dl>
+          ) : recoveryCase.order ? (
+            <dl className="divide-y divide-border">
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Checkout amount
+                </dt>
+                <dd className="text-sm font-semibold text-foreground">
+                  {formatAmount(
+                    recoveryCase.order.amount,
+                    recoveryCase.order.currency,
+                  )}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Checkout status
+                </dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.order.status)}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Checkout started
+                </dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {new Date(recoveryCase.order.createdAt).toLocaleString()}
                 </dd>
               </div>
             </dl>

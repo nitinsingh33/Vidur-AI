@@ -1,11 +1,5 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  RecoveryCaseStatus,
-  RiskLevel,
-} from '../generated/prisma/enums';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { RecoveryCaseStatus, RiskLevel } from '../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -16,6 +10,7 @@ export class RecoveryCasesService {
     merchantId?: string;
     status?: RecoveryCaseStatus;
     riskLevel?: RiskLevel;
+    rootCause?: string;
     page?: number;
     limit?: number;
   }) {
@@ -31,6 +26,9 @@ export class RecoveryCasesService {
       }),
       ...(filters.riskLevel && {
         riskLevel: filters.riskLevel,
+      }),
+      ...(filters.rootCause && {
+        rootCause: filters.rootCause,
       }),
     };
 
@@ -105,9 +103,7 @@ export class RecoveryCasesService {
     });
 
     if (!recoveryCase) {
-      throw new NotFoundException(
-        `Recovery case ${id} not found.`,
-      );
+      throw new NotFoundException(`Recovery case ${id} not found.`);
     }
 
     return recoveryCase;

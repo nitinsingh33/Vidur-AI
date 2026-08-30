@@ -1,5 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export interface RazorpayOrder {
   id: string;
@@ -31,6 +32,8 @@ export class RazorpayService {
   private readonly keySecret = process.env.RAZORPAY_KEY_SECRET;
 
   private readonly webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  constructor(private readonly prisma: PrismaService) {}
 
   private basicAuthHeader(): string {
     if (!this.keyId || !this.keySecret) {
@@ -110,7 +113,11 @@ export class RazorpayService {
   /**
    * What the frontend needs to open Razorpay Checkout.js for a real Test
    * Mode payment attempt: an order id and the public key id (never the
-   * secret).
+   * secret). Also persists an internal Order row (status CREATED,
+   * externalId = the Razorpay order id) so that a customer who never
+   * completes payment is a real, queryable "checkout started, no payment"
+   * record — not just an inference made after the fact — and so
+   * payment.captured/order.paid webhooks can find their way back here.
    */
   async createCheckoutOrder(params: {
     merchantId: string;
@@ -125,12 +132,31 @@ export class RazorpayService {
 
     const order = await this.createOrder(params);
 
+    await this.prisma.order.create({
+      data: {
+        merchantId: params.merchantId,
+        externalId: order.id,
+        amount: params.amount,
+        currency: order.currency,
+        status: 'CREATED',
+      },
+    });
+
     return {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
       keyId: this.keyId,
     };
+  }
+
+  /** Internal Order row for a Razorpay order id, if one was persisted at checkout-creation time. */
+  findInternalOrderByExternalId(merchantId: string, razorpayOrderId: string) {
+    return this.prisma.order.findUnique({
+      where: {
+        merchantId_externalId: { merchantId, externalId: razorpayOrderId },
+      },
+    });
   }
 
   /**

@@ -4,6 +4,7 @@ import { PolicyAction, RecoveryActionType } from '../generated/prisma/enums';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { UpdatePolicyDto } from './dto/update-policy.dto';
 
 export interface PolicyCheckResult {
   decision: PolicyAction;
@@ -23,6 +24,36 @@ export class PolicyService {
       where: { merchantId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async update(
+    merchantId: string,
+    policyId: string,
+    dto: UpdatePolicyDto,
+    actor: { id: string },
+  ) {
+    const policy = await this.prisma.policy.findFirst({
+      where: { id: policyId, merchantId },
+    });
+
+    if (!policy) {
+      throw new NotFoundException(`Policy ${policyId} not found.`);
+    }
+
+    const updated = await this.prisma.policy.update({
+      where: { id: policyId },
+      data: dto,
+    });
+
+    await this.auditService.record({
+      merchantId,
+      action: 'POLICY_UPDATED',
+      actorType: 'HUMAN',
+      actorId: actor.id,
+      details: { policyId, actionType: policy.actionType, changes: dto },
+    });
+
+    return updated;
   }
 
   async check(
@@ -118,6 +149,31 @@ export class PolicyService {
         status: { in: ['EXECUTING', 'SUCCESS', 'FAILED'] },
       },
     });
+
+    /*
+     * An action a human has already approved must not be re-evaluated —
+     * the approval endpoint (RecoveryService.approveAction) already set
+     * policyDecision to ALLOW on it. Re-running the raw limit checks here
+     * would just recompute REQUIRE_APPROVAL again and strand the case.
+     */
+    const approvedAction = await this.prisma.recoveryAction.findFirst({
+      where: {
+        recoveryCaseId,
+        type: actionType as RecoveryActionType,
+        status: 'APPROVED',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (approvedAction) {
+      return {
+        decision: PolicyAction.ALLOW,
+        policyId: 'HUMAN_APPROVED',
+        reason: 'Manually approved by a merchant user.',
+      };
+    }
 
     const result = await this.check(
       recoveryCase.merchantId,

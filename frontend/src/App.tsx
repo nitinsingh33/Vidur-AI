@@ -20,6 +20,7 @@ import { SignUp } from './pages/SignUp'
 import { Dashboard } from './pages/Dashboard'
 import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
+import { CheckoutDropOff } from './pages/CheckoutDropOff'
 import { AgentActivity } from './pages/AgentActivity'
 import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
@@ -66,6 +67,11 @@ function AppShell() {
               <Route
                 path="/batches"
                 element={<RecoveryBatches />}
+              />
+
+              <Route
+                path="/checkout-dropoff"
+                element={<CheckoutDropOff />}
               />
 
               {/* Agent */}

@@ -1,6 +1,7 @@
 // RecoveryService is Database Orchestration
 
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,11 +9,18 @@ import {
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
-import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
-import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notification/notification.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
+import { RecoveryActionType } from '../generated/prisma/enums';
+
+const LINK_DESCRIPTION: Record<string, string> = {
+  RETRY_PAYMENT: 'a fresh payment link so the customer can retry the payment',
+  SEND_PAYMENT_LINK: 'a payment link',
+  UPDATE_PAYMENT_METHOD:
+    'a payment link so the customer can pay with a different method',
+  FOLLOW_UP_RECEIVABLE: 'a payment link for the overdue invoice',
+};
 
 @Injectable()
 export class RecoveryService {
@@ -21,8 +29,6 @@ export class RecoveryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly strategyService: RecoveryStrategyService,
-    private readonly syntheticPaymentService: SyntheticPaymentService,
-    private readonly syntheticInvoiceService: SyntheticInvoiceService,
     private readonly notificationService: NotificationService,
     private readonly auditService: AuditService,
     private readonly razorpayService: RazorpayService,
@@ -251,8 +257,13 @@ export class RecoveryService {
       );
     }
 
+    /*
+     * APPROVED, not just PENDING — approveAction() flips a REQUIRE_APPROVAL
+     * action's status to APPROVED once a human clears it, and that's the
+     * action /execute must now pick up.
+     */
     const action = recoveryCase.actions.find(
-      (item) => item.status === 'PENDING',
+      (item) => item.status === 'PENDING' || item.status === 'APPROVED',
     );
 
     if (!action) {
@@ -261,8 +272,14 @@ export class RecoveryService {
       );
     }
 
-    if (action.policyDecision !== 'ALLOW') {
-      throw new NotFoundException(`Recovery action is not allowed by policy.`);
+    if (!action.policyDecision || action.policyDecision === 'BLOCK') {
+      throw new NotFoundException(`Recovery action is blocked by policy.`);
+    }
+
+    if (action.policyDecision === 'REQUIRE_APPROVAL') {
+      throw new NotFoundException(
+        `Recovery action requires human approval before it can execute.`,
+      );
     }
 
     if (action.type === 'ESCALATE_HUMAN' || action.type === 'STOP_RECOVERY') {
@@ -347,47 +364,30 @@ export class RecoveryService {
 
     try {
       /*
-       * SEND_EMAIL and SEND_PAYMENT_LINK are cross-cutting, real channels —
-       * not tied to any one case shape, and not simulated. They're checked
-       * first, ahead of the shape-based branches below. Everything else
-       * stays simulated: three case shapes, one action loop — a payment
-       * failure is retried on the Payment itself; checkout abandonment has
-       * no Payment yet (recovery creates one); an overdue invoice is
-       * resolved on the Invoice directly. See SyntheticPaymentService /
-       * SyntheticInvoiceService.
+       * Every non-email recovery channel — SEND_PAYMENT_LINK, RETRY_PAYMENT,
+       * UPDATE_PAYMENT_METHOD, FOLLOW_UP_RECEIVABLE — resolves to the same
+       * real mechanism: a genuine Razorpay Payment Link. Razorpay has no API
+       * to "retry" a specific failed one-off payment or to swap its payment
+       * method after the fact; the real-world equivalent merchants use is
+       * exactly this — issue a fresh, real payment attempt and let the
+       * customer complete it, on whatever method they choose. The action
+       * type stored on the case still reflects which intervention Vidur
+       * chose (and why), even though the underlying mechanism is shared.
        *
-       * SEND_PAYMENT_LINK creates and sends a real Razorpay Payment Link
-       * (RazorpayService.createPaymentLink) but deliberately does NOT touch
-       * Payment/Order/Invoice status — a link being sent is not revenue
-       * recovered. Only the payment_link.paid webhook
-       * (RazorpayWebhookService) is allowed to do that, once the customer
-       * has actually paid.
+       * Neither this nor sendRecoveryEmail touches Payment/Order/Invoice
+       * status — sending a link/email is not revenue recovered. Only a
+       * genuine Razorpay confirmation (RazorpayWebhookService: payment.
+       * captured / payment_link.paid / order.paid) is allowed to do that.
        */
       const result =
         action.type === 'SEND_EMAIL'
           ? await this.sendRecoveryEmail(recoveryCase, action)
-          : action.type === 'SEND_PAYMENT_LINK'
-            ? await this.sendPaymentLink(recoveryCase, action)
-            : recoveryCase.payment
-              ? await this.syntheticPaymentService.attemptRecovery(
-                  recoveryCase.payment.id,
-                  action.type,
-                )
-              : recoveryCase.orderId
-                ? await this.syntheticPaymentService.attemptCheckoutRecovery(
-                    recoveryCase.orderId,
-                    action.type,
-                  )
-                : await this.syntheticInvoiceService.attemptRecovery(
-                    recoveryCase.invoiceId as string,
-                    action.type,
-                  );
+          : await this.createAndSendPaymentLink(recoveryCase, action);
 
       const paymentLinkId = (result as { paymentLinkId?: string })
         .paymentLinkId;
-      const paymentLinkShortUrl = (
-        result as { paymentLinkShortUrl?: string }
-      ).paymentLinkShortUrl;
+      const paymentLinkShortUrl = (result as { paymentLinkShortUrl?: string })
+        .paymentLinkShortUrl;
 
       const completedAction = await this.prisma.recoveryAction.update({
         where: {
@@ -527,23 +527,27 @@ export class RecoveryService {
   }
 
   /**
-   * The other real (non-simulated) recovery channel: creates and sends an
-   * actual Razorpay Test/Live Mode Payment Link. Like sendRecoveryEmail,
-   * recoveredAmount is always 0 here — creating/sending a link isn't
+   * The real (non-simulated) mechanism behind every link-based recovery
+   * channel: creates and sends an actual Razorpay Test/Live Mode Payment
+   * Link. recoveredAmount is always 0 here — creating/sending a link isn't
    * revenue recovered. Only RazorpayWebhookService, on a genuine
-   * payment_link.paid event, is allowed to capture the underlying
-   * Payment/Order/Invoice.
+   * payment_link.paid / payment.captured / order.paid event, is allowed to
+   * capture the underlying Payment/Order/Invoice.
    */
-  private async sendPaymentLink(
+  private async createAndSendPaymentLink(
     recoveryCase: {
       id: string;
       merchantId: string;
-      customer: { name: string; email: string | null; phone: string | null } | null;
+      customer: {
+        name: string;
+        email: string | null;
+        phone: string | null;
+      } | null;
       payment: { amount: unknown } | null;
       order: { amount: unknown } | null;
       invoice: { amount: unknown } | null;
     },
-    action: { type: string },
+    action: { type: RecoveryActionType },
   ) {
     const customer = recoveryCase.customer;
 
@@ -551,8 +555,10 @@ export class RecoveryService {
       return {
         successful: false,
         recoveredAmount: 0,
-        reason: 'Customer has no email or phone on file; cannot send a payment link.',
-        message: 'Customer has no email or phone on file; cannot send a payment link.',
+        reason:
+          'Customer has no email or phone on file; cannot send a payment link.',
+        message:
+          'Customer has no email or phone on file; cannot send a payment link.',
         channel: action.type,
       };
     }
@@ -574,9 +580,11 @@ export class RecoveryService {
       };
     }
 
+    const description = LINK_DESCRIPTION[action.type] ?? 'a payment link';
+
     const link = await this.razorpayService.createPaymentLink({
       amount,
-      description: 'Complete your payment — Vidur AI recovery',
+      description: `Complete your payment — Vidur AI recovery`,
       customerName: customer.name,
       customerEmail: customer.email ?? undefined,
       customerPhone: customer.phone ?? undefined,
@@ -587,8 +595,8 @@ export class RecoveryService {
     return {
       successful: true,
       recoveredAmount: 0,
-      reason: `Payment link created and sent (${link.short_url}).`,
-      message: `Payment link created and sent (${link.short_url}).`,
+      reason: `Sent ${description} (${link.short_url}).`,
+      message: `Sent ${description} (${link.short_url}).`,
       channel: action.type,
       paymentLinkId: link.id,
       paymentLinkShortUrl: link.short_url,
@@ -806,5 +814,141 @@ export class RecoveryService {
     }
 
     return response.json();
+  }
+
+  /**
+   * A human clears a REQUIRE_APPROVAL-gated action for execution. The
+   * agent already escalated the case when it first hit this policy
+   * decision (it cannot pause mid-run to wait on a person), so approving
+   * also reopens the case from ESCALATED — the merchant (or "Run agent"
+   * again) can then call /execute directly.
+   */
+  async approveAction(
+    recoveryCaseId: string,
+    actionId: string,
+    actor: { id: string; merchantId: string },
+  ) {
+    const action = await this.prisma.recoveryAction.findUnique({
+      where: { id: actionId },
+      include: { recoveryCase: true },
+    });
+
+    if (
+      !action ||
+      action.recoveryCaseId !== recoveryCaseId ||
+      action.recoveryCase.merchantId !== actor.merchantId
+    ) {
+      throw new NotFoundException(`Recovery action ${actionId} not found.`);
+    }
+
+    if (action.policyDecision !== 'REQUIRE_APPROVAL') {
+      throw new BadRequestException(
+        `Action does not require approval (policy decision: ${action.policyDecision ?? 'none'}).`,
+      );
+    }
+
+    if (action.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Action has already been ${action.status.toLowerCase()}.`,
+      );
+    }
+
+    const updatedAction = await this.prisma.recoveryAction.update({
+      where: { id: actionId },
+      data: { status: 'APPROVED', policyDecision: 'ALLOW' },
+    });
+
+    if (action.recoveryCase.status === 'ESCALATED') {
+      await this.prisma.recoveryCase.update({
+        where: { id: recoveryCaseId },
+        data: { status: 'IN_PROGRESS', closedAt: null },
+      });
+
+      await this.auditService.record({
+        merchantId: actor.merchantId,
+        recoveryCaseId,
+        action: 'RECOVERY_CASE_REOPENED',
+        actorType: 'HUMAN',
+        actorId: actor.id,
+        details: { reason: 'Action approved by a merchant user.' },
+      });
+    }
+
+    await this.auditService.record({
+      merchantId: actor.merchantId,
+      recoveryCaseId,
+      action: 'RECOVERY_ACTION_APPROVED',
+      actorType: 'HUMAN',
+      actorId: actor.id,
+      details: { actionId, actionType: action.type },
+    });
+
+    return updatedAction;
+  }
+
+  /**
+   * A human declines a REQUIRE_APPROVAL-gated action. There's no other
+   * pending action to fall back on, so this stops recovery on the case
+   * outright rather than leaving it stranded in ESCALATED forever.
+   */
+  async rejectAction(
+    recoveryCaseId: string,
+    actionId: string,
+    actor: { id: string; merchantId: string },
+  ) {
+    const action = await this.prisma.recoveryAction.findUnique({
+      where: { id: actionId },
+      include: { recoveryCase: true },
+    });
+
+    if (
+      !action ||
+      action.recoveryCaseId !== recoveryCaseId ||
+      action.recoveryCase.merchantId !== actor.merchantId
+    ) {
+      throw new NotFoundException(`Recovery action ${actionId} not found.`);
+    }
+
+    if (action.policyDecision !== 'REQUIRE_APPROVAL') {
+      throw new BadRequestException(
+        `Action does not require approval (policy decision: ${action.policyDecision ?? 'none'}).`,
+      );
+    }
+
+    if (action.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Action has already been ${action.status.toLowerCase()}.`,
+      );
+    }
+
+    const updatedAction = await this.prisma.recoveryAction.update({
+      where: { id: actionId },
+      data: { status: 'BLOCKED', completedAt: new Date() },
+    });
+
+    await this.prisma.recoveryCase.update({
+      where: { id: recoveryCaseId },
+      data: { status: 'STOPPED', closedAt: new Date() },
+    });
+
+    await this.auditService.record({
+      merchantId: actor.merchantId,
+      recoveryCaseId,
+      action: 'RECOVERY_ACTION_REJECTED',
+      actorType: 'HUMAN',
+      actorId: actor.id,
+      details: { actionId, actionType: action.type },
+    });
+
+    await this.auditService.record({
+      merchantId: actor.merchantId,
+      recoveryCaseId,
+      action: 'RECOVERY_STOPPED',
+      actorType: 'HUMAN',
+      actorId: actor.id,
+      details: { reason: 'Action rejected by a merchant user.' },
+    });
+
+    return updatedAction;
   }
 }

@@ -1,19 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
-import { SyntheticPaymentService } from './sythetic-payment.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [AuthModule],
   controllers: [PaymentsController],
-  providers: [
-    PaymentsService,
-    SyntheticPaymentService,
-  ],
-  exports: [
-    PaymentsService,
-    SyntheticPaymentService,
-  ],
+  providers: [PaymentsService],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

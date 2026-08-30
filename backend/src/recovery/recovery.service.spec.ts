@@ -2,8 +2,6 @@ import { RecoveryActionType } from '../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryService } from './recovery.service';
 import { RecoveryStrategyService } from './recovery-strategy.service';
-import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
-import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notification/notification.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
@@ -14,20 +12,15 @@ describe('RecoveryService', () => {
   const prisma = {
     recoveryCase: {
       findUnique: jest.fn(),
+      update: jest.fn(),
     },
     recoveryAction: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     },
   } as unknown as PrismaService;
-
-  const syntheticPaymentService = {
-    attemptRecovery: jest.fn(),
-  } as unknown as SyntheticPaymentService;
-
-  const syntheticInvoiceService = {
-    attemptRecovery: jest.fn(),
-  } as unknown as SyntheticInvoiceService;
 
   const auditService = {
     record: jest.fn(),
@@ -47,8 +40,6 @@ describe('RecoveryService', () => {
     service = new RecoveryService(
       prisma,
       new RecoveryStrategyService(),
-      syntheticPaymentService,
-      syntheticInvoiceService,
       notificationService,
       auditService,
       razorpayService,
@@ -133,5 +124,91 @@ describe('RecoveryService', () => {
     expect(result).toEqual(existingAction);
 
     expect(prisma.recoveryAction.create).not.toHaveBeenCalled();
+  });
+
+  describe('approveAction / rejectAction', () => {
+    const actor = { id: 'user-1', merchantId: 'merchant-1' };
+
+    it('approves a REQUIRE_APPROVAL action, flips it to ALLOW, and reopens an escalated case', async () => {
+      prisma.recoveryAction.findUnique = jest.fn().mockResolvedValue({
+        id: 'action-1',
+        recoveryCaseId: 'case-1',
+        type: 'RETRY_PAYMENT',
+        status: 'PENDING',
+        policyDecision: 'REQUIRE_APPROVAL',
+        recoveryCase: {
+          id: 'case-1',
+          merchantId: 'merchant-1',
+          status: 'ESCALATED',
+        },
+      });
+      prisma.recoveryAction.update = jest.fn().mockResolvedValue({
+        id: 'action-1',
+        status: 'APPROVED',
+        policyDecision: 'ALLOW',
+      });
+
+      await service.approveAction('case-1', 'action-1', actor);
+
+      expect(prisma.recoveryAction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'action-1' },
+          data: { status: 'APPROVED', policyDecision: 'ALLOW' },
+        }),
+      );
+      expect(prisma.recoveryCase.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'case-1' },
+          data: { status: 'IN_PROGRESS', closedAt: null },
+        }),
+      );
+    });
+
+    it('rejects approving an action that is not gated by REQUIRE_APPROVAL', async () => {
+      prisma.recoveryAction.findUnique = jest.fn().mockResolvedValue({
+        id: 'action-1',
+        recoveryCaseId: 'case-1',
+        status: 'PENDING',
+        policyDecision: 'ALLOW',
+        recoveryCase: {
+          id: 'case-1',
+          merchantId: 'merchant-1',
+          status: 'IN_PROGRESS',
+        },
+      });
+
+      await expect(
+        service.approveAction('case-1', 'action-1', actor),
+      ).rejects.toThrow();
+      expect(prisma.recoveryAction.update).not.toHaveBeenCalled();
+    });
+
+    it('stops the case when a required approval is rejected', async () => {
+      prisma.recoveryAction.findUnique = jest.fn().mockResolvedValue({
+        id: 'action-1',
+        recoveryCaseId: 'case-1',
+        type: 'FOLLOW_UP_RECEIVABLE',
+        status: 'PENDING',
+        policyDecision: 'REQUIRE_APPROVAL',
+        recoveryCase: {
+          id: 'case-1',
+          merchantId: 'merchant-1',
+          status: 'ESCALATED',
+        },
+      });
+      prisma.recoveryAction.update = jest.fn().mockResolvedValue({
+        id: 'action-1',
+        status: 'BLOCKED',
+      });
+
+      await service.rejectAction('case-1', 'action-1', actor);
+
+      expect(prisma.recoveryCase.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'case-1' },
+          data: expect.objectContaining({ status: 'STOPPED' }),
+        }),
+      );
+    });
   });
 });

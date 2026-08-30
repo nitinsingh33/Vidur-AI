@@ -284,8 +284,10 @@ def escalate(
     outcome = (state.get("execution_result") or {}).get("outcome", {})
     policy_decision = state.get("policy_decision")
 
-    if policy_decision == "DENY":
-        reason = "Policy denied the intervention."
+    if policy_decision == "REQUIRE_APPROVAL":
+        reason = "Recovery action requires human approval before it can proceed."
+    elif policy_decision == "BLOCK":
+        reason = "Policy blocked the intervention."
     elif outcome.get("shouldStop"):
         reason = "Retry limit exhausted — escalating to human review."
     else:

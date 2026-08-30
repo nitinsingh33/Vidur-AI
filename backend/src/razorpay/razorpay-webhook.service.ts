@@ -6,11 +6,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PaymentMethod, PaymentStatus } from '../generated/prisma/enums';
+import {
+  PaymentMethod,
+  PaymentStatus,
+  RecoveryActionType,
+} from '../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RiskService } from '../risk/risk.service';
 import { RazorpayService } from './razorpay.service';
+import { ACTIVE_RECOVERY_CASE_STATUSES } from '../recovery/recovery-case-status.util';
 
 interface RazorpayPaymentEntity {
   id: string;
@@ -37,6 +42,14 @@ interface RazorpayPaymentLinkEntity {
   notes?: Record<string, string>;
 }
 
+interface RazorpayOrderEntity {
+  id: string;
+  amount?: number;
+  amount_paid?: number;
+  status?: string;
+  notes?: Record<string, string>;
+}
+
 interface RazorpayWebhookPayload {
   event: string;
   payload?: {
@@ -45,6 +58,9 @@ interface RazorpayWebhookPayload {
     };
     payment_link?: {
       entity?: RazorpayPaymentLinkEntity;
+    };
+    order?: {
+      entity?: RazorpayOrderEntity;
     };
   };
 }
@@ -59,16 +75,19 @@ const METHOD_MAP: Record<string, PaymentMethod> = {
 
 /**
  * Real entry point for the webhook-driven recovery pipeline in production.
- * One endpoint, two events handled:
+ * Four events handled:
  *  - `payment.failed` turns a genuine Razorpay failure into a Payment row
- *    and hands it to the unmodified RiskService.assessPayment() pipeline,
- *    exactly like DemoService.triggerPaymentFailure() does for the
- *    manual/demo path — the only difference is where the FAILED Payment's
- *    data comes from.
- *  - `payment_link.paid` is the ONLY thing allowed to mark a
- *    SEND_PAYMENT_LINK recovery as actually successful — creating/sending
- *    the link (RecoveryService.sendPaymentLink) never touches
- *    Payment/Order/Invoice status by itself.
+ *    and hands it to the unmodified RiskService.assessPayment() pipeline.
+ *  - `payment_link.paid` confirms a SEND_PAYMENT_LINK/RETRY_PAYMENT/
+ *    UPDATE_PAYMENT_METHOD/FOLLOW_UP_RECEIVABLE action actually resulted in
+ *    payment — creating/sending the link never touches Payment/Order/
+ *    Invoice status by itself (see RecoveryService.createAndSendPaymentLink).
+ *  - `payment.captured` catches the customer paying independently of any
+ *    Vidur-sent link (e.g. retrying directly on the merchant's own
+ *    checkout) so a case doesn't sit open forever after the money already
+ *    arrived.
+ *  - `order.paid` is a defensive, order-level confirmation of the same
+ *    fact, in case `payment.captured` was missed or arrives out of order.
  * Everything else is acknowledged (2xx) but not processed.
  */
 @Injectable()
@@ -122,12 +141,21 @@ export class RazorpayWebhookService {
       return this.handlePaymentLinkPaid(payload, eventId);
     }
 
+    if (event === 'payment.captured') {
+      return this.handlePaymentCaptured(payload, eventId);
+    }
+
+    if (event === 'order.paid') {
+      return this.handleOrderPaid(payload, eventId);
+    }
+
     if (event !== 'payment.failed') {
       return {
         received: true,
         processed: false,
         event,
-        reason: 'Event type not handled (payment.failed, payment_link.paid only).',
+        reason:
+          'Event type not handled (payment.failed, payment.captured, payment_link.paid, order.paid only).',
       };
     }
 
@@ -206,12 +234,20 @@ export class RazorpayWebhookService {
       METHOD_MAP[(entity.method ?? '').toLowerCase()] ?? PaymentMethod.OTHER;
     const amountRupees = (Number(entity.amount) / 100).toString();
 
+    const internalOrder = razorpayOrderId
+      ? await this.razorpayService.findInternalOrderByExternalId(
+          merchantId,
+          razorpayOrderId,
+        )
+      : null;
+
     let payment: Awaited<ReturnType<PaymentsService['create']>>;
 
     try {
       payment = await this.paymentsService.create({
         merchantId,
         customerId: customer?.id,
+        orderId: internalOrder?.id,
         amount: amountRupees,
         currency: entity.currency ?? 'INR',
         method,
@@ -265,7 +301,44 @@ export class RazorpayWebhookService {
         `merchantId=${merchantId}, eventId=${eventId ?? 'unknown'}).`,
     );
 
-    const recoveryCase = await this.riskService.assessPayment(payment.id);
+    /*
+     * If this order already has an open checkout-abandonment case (no
+     * Payment yet), the customer didn't abandon — they tried and failed.
+     * Re-use the same case instead of opening a duplicate one.
+     */
+    const existingOrderCase = internalOrder
+      ? await this.prisma.recoveryCase.findFirst({
+          where: {
+            orderId: internalOrder.id,
+            paymentId: null,
+            status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+          },
+        })
+      : null;
+
+    let recoveryCase: { id: string; riskLevel: string | null };
+
+    if (existingOrderCase) {
+      recoveryCase = await this.prisma.recoveryCase.update({
+        where: { id: existingOrderCase.id },
+        data: { paymentId: payment.id, rootCause: failureReason },
+      });
+
+      await this.auditService.record({
+        merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_CASE_LINKED_TO_FAILED_PAYMENT',
+        actorType: 'SYSTEM',
+        details: {
+          paymentId: payment.id,
+          razorpayPaymentId,
+          previousRootCause: 'CHECKOUT_ABANDONED',
+          newRootCause: failureReason,
+        },
+      });
+    } else {
+      recoveryCase = await this.riskService.assessPayment(payment.id);
+    }
 
     this.logger.log(
       `Recovery case ${recoveryCase.id} created for payment ${payment.id} ` +
@@ -297,14 +370,13 @@ export class RazorpayWebhookService {
   }
 
   /**
-   * The only path allowed to turn a SEND_PAYMENT_LINK action into actual
-   * recovered revenue. Looks the paid link back up via
-   * RecoveryAction.externalReferenceId (stamped when the link was created —
-   * see RecoveryService.sendPaymentLink), then captures the underlying
-   * Payment/Order/Invoice and records the RecoveryOutcome — mirroring what
-   * RecoveryService.observeRecovery does for the simulated channels, but
-   * triggered by a genuine Razorpay confirmation instead of being computed
-   * on demand.
+   * The only path allowed to turn a link-based recovery action
+   * (SEND_PAYMENT_LINK / RETRY_PAYMENT / UPDATE_PAYMENT_METHOD /
+   * FOLLOW_UP_RECEIVABLE — all four create a real Razorpay Payment Link,
+   * see RecoveryService) into actual recovered revenue via that specific
+   * link. Looks the paid link back up via
+   * RecoveryAction.externalReferenceId, then delegates to closeRecoveryCase
+   * for the actual state transition.
    */
   private async handlePaymentLinkPaid(
     payload: RazorpayWebhookPayload,
@@ -325,11 +397,6 @@ export class RazorpayWebhookService {
 
     const action = await this.prisma.recoveryAction.findFirst({
       where: { externalReferenceId: linkEntity.id },
-      include: {
-        recoveryCase: {
-          include: { payment: true, order: true, invoice: true, outcome: true },
-        },
-      },
     });
 
     if (!action) {
@@ -344,12 +411,322 @@ export class RazorpayWebhookService {
       };
     }
 
-    const recoveryCase = action.recoveryCase;
+    const result = await this.closeRecoveryCase(action.recoveryCaseId, {
+      recoveryMethod: action.type,
+      source: 'razorpay_payment_link_webhook',
+      eventId,
+    });
+
+    this.logger.log(
+      `payment_link.paid for link ${linkEntity.id} -> case ${action.recoveryCaseId} ` +
+        `(${result.processed ? 'processed' : 'skipped/duplicate'}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return result;
+  }
+
+  /**
+   * Catches the customer paying independently of anything Vidur sent —
+   * e.g. retrying directly on the merchant's own checkout. If the payment
+   * was made via a Vidur-sent Payment Link, Razorpay copies our
+   * `notes.recoveryCaseId` onto the resulting payment entity too, so that
+   * path is attributed to the real originating action rather than treated
+   * as an anonymous "customer self-recovered" event.
+   */
+  private async handlePaymentCaptured(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const entity = payload.payload?.payment?.entity;
+
+    if (!entity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing payment entity.',
+      };
+    }
+
+    const merchantContext = await this.resolveMerchantContext(entity);
+
+    if (!merchantContext) {
+      return {
+        received: true,
+        processed: false,
+        reason:
+          'Unable to resolve merchant for this payment — order was not created via /razorpay/checkout.',
+      };
+    }
+
+    const {
+      merchantId,
+      customerName,
+      customerId: noteCustomerId,
+    } = merchantContext;
+
+    const internalOrder = entity.order_id
+      ? await this.razorpayService.findInternalOrderByExternalId(
+          merchantId,
+          entity.order_id,
+        )
+      : null;
+
+    const existingPayment = await this.findExistingPayment(
+      merchantId,
+      entity.id,
+    );
+
+    let paymentId: string;
+
+    if (existingPayment) {
+      if (existingPayment.status === PaymentStatus.CAPTURED) {
+        return {
+          received: true,
+          processed: false,
+          duplicate: true,
+          paymentId: existingPayment.id,
+        };
+      }
+
+      await this.prisma.payment.update({
+        where: { id: existingPayment.id },
+        data: {
+          status: PaymentStatus.CAPTURED,
+          failureReason: null,
+          orderId: existingPayment.orderId ?? internalOrder?.id,
+        },
+      });
+
+      paymentId = existingPayment.id;
+    } else {
+      const method =
+        METHOD_MAP[(entity.method ?? '').toLowerCase()] ?? PaymentMethod.OTHER;
+      const amountRupees = (Number(entity.amount) / 100).toString();
+      const customer = await this.resolveCustomer(
+        merchantId,
+        entity,
+        customerName,
+        noteCustomerId,
+      );
+
+      const created = await this.paymentsService.create({
+        merchantId,
+        customerId: customer?.id,
+        orderId: internalOrder?.id,
+        amount: amountRupees,
+        currency: entity.currency ?? 'INR',
+        method,
+        status: PaymentStatus.CAPTURED,
+        attemptNumber: 1,
+        externalId: entity.id,
+      });
+
+      paymentId = created.id;
+    }
+
+    await this.prisma.paymentEvent.create({
+      data: {
+        paymentId,
+        type: 'CAPTURED',
+        reason: 'Razorpay payment.captured webhook received.',
+        metadata: {
+          source: 'razorpay_webhook',
+          razorpayEventId: eventId ?? null,
+          razorpayPaymentId: entity.id,
+        },
+      },
+    });
+
+    if (internalOrder && internalOrder.status !== 'PAID') {
+      await this.prisma.order.update({
+        where: { id: internalOrder.id },
+        data: { status: 'PAID' },
+      });
+    }
+
+    const notedCaseId = entity.notes?.recoveryCaseId;
+
+    let targetCaseId: string | null = null;
+
+    if (notedCaseId) {
+      const noted = await this.prisma.recoveryCase.findUnique({
+        where: { id: notedCaseId },
+        select: { id: true },
+      });
+      targetCaseId = noted?.id ?? null;
+    }
+
+    if (!targetCaseId && internalOrder) {
+      const matched = await this.prisma.recoveryCase.findFirst({
+        where: {
+          status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+          OR: [
+            { orderId: internalOrder.id },
+            { payment: { orderId: internalOrder.id } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      targetCaseId = matched?.id ?? null;
+    }
+
+    if (!targetCaseId) {
+      return {
+        received: true,
+        processed: true,
+        paymentId,
+        note: 'No open recovery case matched this captured payment.',
+      };
+    }
+
+    const recoveryMethod = notedCaseId
+      ? await this.resolveOriginatingActionType(targetCaseId)
+      : null;
+
+    const result = await this.closeRecoveryCase(targetCaseId, {
+      recoveryMethod,
+      source: notedCaseId
+        ? 'razorpay_payment_captured_via_recovery_link'
+        : 'razorpay_payment_captured_direct',
+      eventId,
+    });
+
+    return { ...result, paymentId };
+  }
+
+  /**
+   * Defensive, order-level confirmation of the same fact as
+   * payment.captured — closes the case if it's somehow still open (e.g.
+   * payment.captured was missed or arrived out of order).
+   */
+  private async handleOrderPaid(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const entity = payload.payload?.order?.entity;
+
+    if (!entity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing order entity.',
+      };
+    }
+
+    const merchantId = entity.notes?.merchantId;
+
+    if (!merchantId) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unable to resolve merchant for this order.',
+      };
+    }
+
+    const internalOrder =
+      await this.razorpayService.findInternalOrderByExternalId(
+        merchantId,
+        entity.id,
+      );
+
+    if (!internalOrder) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'No internal order found for this Razorpay order id.',
+      };
+    }
+
+    if (internalOrder.status !== 'PAID') {
+      await this.prisma.order.update({
+        where: { id: internalOrder.id },
+        data: { status: 'PAID' },
+      });
+    }
+
+    const targetCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+        OR: [
+          { orderId: internalOrder.id },
+          { payment: { orderId: internalOrder.id } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!targetCase) {
+      return {
+        received: true,
+        processed: true,
+        orderId: internalOrder.id,
+        note: 'No open recovery case matched this paid order.',
+      };
+    }
+
+    const recoveryMethod = await this.resolveOriginatingActionType(
+      targetCase.id,
+    );
+
+    return this.closeRecoveryCase(targetCase.id, {
+      recoveryMethod,
+      source: 'razorpay_order_paid',
+      eventId,
+      ensurePaymentCaptured: targetCase.orderId
+        ? { externalId: `order_paid_${entity.id}`, method: PaymentMethod.OTHER }
+        : undefined,
+    });
+  }
+
+  /** Most recent action Vidur actually ran for this case — used to attribute recovered revenue. */
+  private async resolveOriginatingActionType(
+    recoveryCaseId: string,
+  ): Promise<RecoveryActionType | null> {
+    const action = await this.prisma.recoveryAction.findFirst({
+      where: {
+        recoveryCaseId,
+        status: { in: ['EXECUTING', 'SUCCESS'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return action?.type ?? null;
+  }
+
+  /**
+   * Single, idempotent state transition shared by every "this case's money
+   * actually arrived" path: marks the underlying Payment/Order/Invoice
+   * paid, records a RecoveryOutcome, and closes the case as RECOVERED.
+   * Safe to call more than once for the same case — a case that already
+   * has an outcome (or is already RECOVERED) is a no-op.
+   */
+  private async closeRecoveryCase(
+    recoveryCaseId: string,
+    params: {
+      recoveryMethod: RecoveryActionType | null;
+      source: string;
+      eventId: string | undefined;
+      ensurePaymentCaptured?: { externalId: string; method: PaymentMethod };
+    },
+  ) {
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: { id: recoveryCaseId },
+      include: { payment: true, order: true, invoice: true, outcome: true },
+    });
+
+    if (!recoveryCase) {
+      return {
+        received: true,
+        processed: false,
+        reason: `Recovery case ${recoveryCaseId} not found.`,
+      };
+    }
 
     if (recoveryCase.outcome || recoveryCase.status === 'RECOVERED') {
       this.logger.log(
-        `Duplicate payment_link.paid for link ${linkEntity.id} ` +
-          `(eventId=${eventId ?? 'unknown'}); case ${recoveryCase.id} already recovered.`,
+        `Duplicate recovery confirmation for case ${recoveryCase.id} ` +
+          `(source=${params.source}, eventId=${params.eventId ?? 'unknown'}); already recovered.`,
       );
       return {
         received: true,
@@ -377,11 +754,10 @@ export class RazorpayWebhookService {
             data: {
               paymentId: recoveryCase.payment.id,
               type: 'CAPTURED',
-              reason: 'Captured via Razorpay Payment Link.',
+              reason: `Captured via ${params.source}.`,
               metadata: {
-                source: 'razorpay_payment_link_webhook',
-                paymentLinkId: linkEntity.id,
-                razorpayEventId: eventId ?? null,
+                source: params.source,
+                razorpayEventId: params.eventId ?? null,
               },
             },
           });
@@ -393,19 +769,27 @@ export class RazorpayWebhookService {
             });
           }
         } else if (recoveryCase.orderId) {
-          await tx.payment.create({
-            data: {
-              merchantId: recoveryCase.merchantId,
-              customerId: recoveryCase.customerId,
-              orderId: recoveryCase.orderId,
-              amount: recoveryCase.order?.amount ?? 0,
-              currency: recoveryCase.order?.currency ?? 'INR',
-              method: 'OTHER',
-              status: PaymentStatus.CAPTURED,
-              attemptNumber: 1,
-              externalId: `plink_payment_${linkEntity.id}`,
-            },
-          });
+          if (params.ensurePaymentCaptured) {
+            const existingCaptured = await tx.payment.findFirst({
+              where: { orderId: recoveryCase.orderId, status: 'CAPTURED' },
+            });
+
+            if (!existingCaptured) {
+              await tx.payment.create({
+                data: {
+                  merchantId: recoveryCase.merchantId,
+                  customerId: recoveryCase.customerId,
+                  orderId: recoveryCase.orderId,
+                  amount: recoveryCase.order?.amount ?? 0,
+                  currency: recoveryCase.order?.currency ?? 'INR',
+                  method: params.ensurePaymentCaptured.method,
+                  status: PaymentStatus.CAPTURED,
+                  attemptNumber: 1,
+                  externalId: params.ensurePaymentCaptured.externalId,
+                },
+              });
+            }
+          }
 
           await tx.order.update({
             where: { id: recoveryCase.orderId },
@@ -423,7 +807,7 @@ export class RazorpayWebhookService {
             recoveryCaseId: recoveryCase.id,
             recoveredAmount,
             successful: true,
-            recoveryMethod: 'SEND_PAYMENT_LINK',
+            recoveryMethod: params.recoveryMethod,
             recoveredAt: new Date(),
           },
         });
@@ -438,10 +822,10 @@ export class RazorpayWebhookService {
         error instanceof Error &&
         error.message.includes('Unique constraint')
       ) {
-        // Lost a race against a concurrent delivery of the same event.
+        // Lost a race against a concurrent delivery of an equivalent event.
         this.logger.log(
-          `Duplicate payment_link.paid for link ${linkEntity.id} ` +
-            `(eventId=${eventId ?? 'unknown'}); already recorded.`,
+          `Duplicate recovery confirmation for case ${recoveryCase.id} ` +
+            `(source=${params.source}, eventId=${params.eventId ?? 'unknown'}); already recorded.`,
         );
         return {
           received: true,
@@ -455,8 +839,8 @@ export class RazorpayWebhookService {
     }
 
     this.logger.log(
-      `Recovery case ${recoveryCase.id} marked RECOVERED via payment link ${linkEntity.id} ` +
-        `(amount=${recoveredAmount}, eventId=${eventId ?? 'unknown'}).`,
+      `Recovery case ${recoveryCase.id} marked RECOVERED via ${params.source} ` +
+        `(amount=${recoveredAmount}, eventId=${params.eventId ?? 'unknown'}).`,
     );
 
     await this.auditService.record({
@@ -465,10 +849,10 @@ export class RazorpayWebhookService {
       action: 'RECOVERY_SUCCEEDED',
       actorType: 'SYSTEM',
       details: {
-        paymentLinkId: linkEntity.id,
         recoveredAmount,
-        recoveryMethod: 'SEND_PAYMENT_LINK',
-        eventId: eventId ?? null,
+        recoveryMethod: params.recoveryMethod,
+        source: params.source,
+        eventId: params.eventId ?? null,
       },
     });
 
@@ -477,7 +861,6 @@ export class RazorpayWebhookService {
       processed: true,
       recoveryCaseId: recoveryCase.id,
       recoveredAmount,
-      paymentLinkId: linkEntity.id,
     };
   }
 

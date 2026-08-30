@@ -52,7 +52,7 @@ export interface RecoveryCase {
     name: string
     email: string
     phone?: string | null
-  }
+  } | null
 
   payment: {
     id: string
@@ -66,6 +66,14 @@ export interface RecoveryCase {
   } | null
 
   invoice?: Record<string, unknown> | null
+
+  order?: {
+    id: string
+    amount: string
+    currency: string
+    status: string
+    createdAt: string
+  } | null
 
   actions: RecoveryAction[]
 
@@ -87,13 +95,14 @@ export interface GetRecoveryCasesOptions {
   limit?: number
   status?: string
   riskLevel?: string
+  rootCause?: string
 }
 
 export async function getRecoveryCases(
   token: string,
   options: GetRecoveryCasesOptions = {},
 ): Promise<RecoveryCasesResponse> {
-  const { page = 1, limit = 5, status, riskLevel } = options
+  const { page = 1, limit = 5, status, riskLevel, rootCause } = options
 
   const params = new URLSearchParams({
     page: String(page),
@@ -101,6 +110,7 @@ export async function getRecoveryCases(
   })
   if (status) params.set('status', status)
   if (riskLevel) params.set('riskLevel', riskLevel)
+  if (rootCause) params.set('rootCause', rootCause)
 
   const response = await fetch(
     `${API_BASE_URL}/recovery-cases?${params.toString()}`,
@@ -218,6 +228,56 @@ export async function runAgentRecovery(
 
   if (!response.ok) {
     throw new Error(`Agent recovery failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+async function parseErrorMessage(response: Response) {
+  try {
+    const body = await response.json()
+    if (typeof body.message === 'string') return body.message
+  } catch {
+    // fall through to status-based message
+  }
+  return `Request failed: ${response.status}`
+}
+
+export async function approveRecoveryAction(
+  token: string,
+  recoveryCaseId: string,
+  actionId: string,
+): Promise<RecoveryAction> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/actions/${actionId}/approve`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
+export async function rejectRecoveryAction(
+  token: string,
+  recoveryCaseId: string,
+  actionId: string,
+): Promise<RecoveryAction> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery/cases/${recoveryCaseId}/actions/${actionId}/reject`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
   }
 
   return response.json()

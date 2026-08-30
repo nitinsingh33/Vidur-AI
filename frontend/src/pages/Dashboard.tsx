@@ -389,7 +389,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-foreground">
-                          {recoveryCase.customer.name}
+                          {recoveryCase.customer?.name ?? 'Unknown customer'}
                         </div>
 
                         <div className="mt-0.5 text-xs text-muted-foreground">

@@ -26,3 +26,31 @@ export async function getPolicies(token: string): Promise<Policy[]> {
 
   return response.json()
 }
+
+export async function updatePolicyDecision(
+  token: string,
+  policyId: string,
+  decision: string,
+): Promise<Policy> {
+  const response = await fetch(`${API_BASE_URL}/policies/${policyId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ decision }),
+  })
+
+  if (!response.ok) {
+    let message = `Policy update failed: ${response.status}`
+    try {
+      const body = await response.json()
+      if (typeof body.message === 'string') message = body.message
+    } catch {
+      // fall through to status-based message
+    }
+    throw new Error(message)
+  }
+
+  return response.json()
+}

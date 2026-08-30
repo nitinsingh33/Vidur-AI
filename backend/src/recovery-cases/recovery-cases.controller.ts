@@ -8,28 +8,21 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import {
-  RecoveryCaseStatus,
-  RiskLevel,
-} from '../generated/prisma/enums';
-import {
-  AuthenticatedUser,
-  JwtAuthGuard,
-} from '../auth/jwt-auth.guard';
+import { RecoveryCaseStatus, RiskLevel } from '../generated/prisma/enums';
+import { AuthenticatedUser, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RecoveryCasesService } from './recovery-cases.service';
 
 @Controller('recovery-cases')
 @UseGuards(JwtAuthGuard)
 export class RecoveryCasesController {
-  constructor(
-    private readonly recoveryCasesService: RecoveryCasesService,
-  ) {}
+  constructor(private readonly recoveryCasesService: RecoveryCasesService) {}
 
   @Get()
   findAll(
     @Req() request: Request & { user: AuthenticatedUser },
     @Query('status') status?: RecoveryCaseStatus,
     @Query('riskLevel') riskLevel?: RiskLevel,
+    @Query('rootCause') rootCause?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -37,6 +30,7 @@ export class RecoveryCasesController {
       merchantId: request.user.merchantId,
       status,
       riskLevel,
+      rootCause,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });

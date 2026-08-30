@@ -6,7 +6,7 @@ export interface RecordAuditLogInput {
   merchantId: string;
   recoveryCaseId?: string | null;
   action: string;
-  actorType: 'AGENT' | 'SYSTEM';
+  actorType: 'AGENT' | 'SYSTEM' | 'HUMAN';
   actorId?: string | null;
   details?: Record<string, unknown> | null;
 }
