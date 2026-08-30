@@ -32,7 +32,12 @@ function buildRedisConnection() {
   const redisUrl = process.env.REDIS_URL;
 
   if (!redisUrl) {
-    return { host: 'localhost', port: 6379 };
+    return {
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
   }
 
   const url = new URL(redisUrl);
@@ -43,6 +48,13 @@ function buildRedisConnection() {
     username: url.username || undefined,
     password: url.password || undefined,
     tls: url.protocol === 'rediss:' ? {} : undefined,
+    // Required by BullMQ for any connection used by a Worker: without these,
+    // ioredis's default retry ceiling gets exhausted against a proxied/managed
+    // Redis (e.g. Upstash) that periodically drops idle connections, and the
+    // resulting errors surface as unhandled ECONNRESET/EPIPE crashes instead
+    // of a graceful reconnect.
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
   };
 }
 
