@@ -4,13 +4,18 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   RecoveryCaseStatus,
   RiskLevel,
 } from '../generated/prisma/enums';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import {
+  AuthenticatedUser,
+  JwtAuthGuard,
+} from '../auth/jwt-auth.guard';
 import { RecoveryCasesService } from './recovery-cases.service';
 
 @Controller('recovery-cases')
@@ -22,14 +27,14 @@ export class RecoveryCasesController {
 
   @Get()
   findAll(
-    @Query('merchantId') merchantId?: string,
+    @Req() request: Request & { user: AuthenticatedUser },
     @Query('status') status?: RecoveryCaseStatus,
     @Query('riskLevel') riskLevel?: RiskLevel,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.recoveryCasesService.findAll({
-      merchantId,
+      merchantId: request.user.merchantId,
       status,
       riskLevel,
       page: page ? Number(page) : undefined,

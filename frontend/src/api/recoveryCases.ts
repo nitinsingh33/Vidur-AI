@@ -196,6 +196,7 @@ export interface AgentRecoveryResult {
   success: boolean | null
   policy_decision: string | null
   candidate_intervention: string | null
+  ai_reasoning: string | null
 }
 
 export async function runAgentRecovery(

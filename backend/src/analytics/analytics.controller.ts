@@ -1,12 +1,18 @@
 import {
   Controller,
   Get,
-  ParseUUIDPipe,
-  Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AnalyticsService } from './analytics.service';
+import {
+  AuthenticatedUser,
+  JwtAuthGuard,
+} from '../auth/jwt-auth.guard';
 
 @Controller('analytics')
+@UseGuards(JwtAuthGuard)
 export class AnalyticsController {
   constructor(
     private readonly analyticsService: AnalyticsService,
@@ -14,25 +20,28 @@ export class AnalyticsController {
 
   @Get('revenue-at-risk')
   getRevenueAtRisk(
-    @Query('merchantId', new ParseUUIDPipe({ optional: true }))
-    merchantId?: string,
+    @Req() request: Request & { user: AuthenticatedUser },
   ) {
-    return this.analyticsService.getRevenueAtRisk(merchantId);
+    return this.analyticsService.getRevenueAtRisk(
+      request.user.merchantId,
+    );
   }
 
   @Get('revenue-recovered')
   getRevenueRecovered(
-    @Query('merchantId', new ParseUUIDPipe({ optional: true }))
-    merchantId?: string,
+    @Req() request: Request & { user: AuthenticatedUser },
   ) {
-    return this.analyticsService.getRevenueRecovered(merchantId);
+    return this.analyticsService.getRevenueRecovered(
+      request.user.merchantId,
+    );
   }
 
   @Get('summary')
   getSummary(
-    @Query('merchantId', new ParseUUIDPipe({ optional: true }))
-    merchantId?: string,
+    @Req() request: Request & { user: AuthenticatedUser },
   ) {
-    return this.analyticsService.getSummary(merchantId);
+    return this.analyticsService.getSummary(
+      request.user.merchantId,
+    );
   }
 }

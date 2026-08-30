@@ -12,8 +12,10 @@ export interface RevenueRecoveredResponse {
   successfulRecoveries: number
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`)
+async function fetchJson<T>(path: string, token: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
 
   if (!response.ok) {
     throw new Error(
@@ -24,15 +26,17 @@ async function fetchJson<T>(path: string): Promise<T> {
   return response.json()
 }
 
-export function getRevenueAtRisk() {
+export function getRevenueAtRisk(token: string) {
   return fetchJson<RevenueAtRiskResponse>(
     '/analytics/revenue-at-risk',
+    token,
   )
 }
 
-export function getRevenueRecovered() {
+export function getRevenueRecovered(token: string) {
   return fetchJson<RevenueRecoveredResponse>(
     '/analytics/revenue-recovered',
+    token,
   )
 }
 
@@ -43,8 +47,9 @@ export interface AnalyticsSummaryResponse {
   escalations: number
 }
 
-export function getAnalyticsSummary() {
+export function getAnalyticsSummary(token: string) {
   return fetchJson<AnalyticsSummaryResponse>(
     '/analytics/summary',
+    token,
   )
 }

@@ -30,10 +30,15 @@ export class AuditController {
   }
 
   @Get('cases/:recoveryCaseId')
+  @UseGuards(JwtAuthGuard)
   findByCase(
+    @Req() request: Request & { user: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.auditService.findByCase(recoveryCaseId);
+    return this.auditService.findByCase(
+      recoveryCaseId,
+      request.user.merchantId,
+    );
   }
 }

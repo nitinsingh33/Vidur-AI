@@ -19,6 +19,7 @@ import { AuditModule } from './audit/audit.module';
 import { RecoveryBatchesModule } from './recovery-batches/recovery-batches.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { AuthModule } from './auth/auth.module';
+import { DemoModule } from './demo/demo.module';
 
 /**
  * Local dev has no REDIS_URL and just talks to the Redis container on
@@ -67,6 +68,7 @@ function buildRedisConnection() {
     RecoveryBatchesModule,
     MerchantsModule,
     AuthModule,
+    DemoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

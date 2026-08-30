@@ -1,34 +1,46 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+
+export interface RazorpayOrder {
+  id: string;
+  amount: number;
+  currency: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+}
+
+export interface CreateCheckoutOrderResult {
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+}
 
 @Injectable()
 export class RazorpayService {
-  private readonly keyId =
-    process.env.RAZORPAY_KEY_ID;
+  private readonly keyId = process.env.RAZORPAY_KEY_ID;
 
-  private readonly keySecret =
-    process.env.RAZORPAY_KEY_SECRET;
+  private readonly keySecret = process.env.RAZORPAY_KEY_SECRET;
 
-  async getOrder(orderId: string) {
+  private readonly webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  private basicAuthHeader(): string {
     if (!this.keyId || !this.keySecret) {
       throw new InternalServerErrorException(
         'Razorpay credentials are not configured.',
       );
     }
 
-    const credentials =
-      Buffer.from(
-        `${this.keyId}:${this.keySecret}`,
-      ).toString('base64');
+    return Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64');
+  }
 
+  async getOrder(orderId: string): Promise<RazorpayOrder> {
     const response = await fetch(
       `https://api.razorpay.com/v1/orders/${orderId}`,
       {
         method: 'GET',
         headers: {
-          Authorization: `Basic ${credentials}`,
+          Authorization: `Basic ${this.basicAuthHeader()}`,
         },
       },
     );
@@ -41,6 +53,103 @@ export class RazorpayService {
       );
     }
 
-    return response.json();
+    return (await response.json()) as RazorpayOrder;
+  }
+
+  /**
+   * Creates a real Razorpay Test/Live Mode order via the Orders API. The
+   * merchant/customer context is stamped into `notes` because this backend
+   * uses one Razorpay account for all merchants — the webhook has no JWT to
+   * identify the merchant from, so it looks the order back up by id and
+   * reads these notes (see RazorpayWebhookService).
+   */
+  async createOrder(params: {
+    amount: number;
+    currency?: string;
+    merchantId: string;
+    customerId?: string;
+    customerName?: string;
+  }): Promise<RazorpayOrder> {
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${this.basicAuthHeader()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: Math.round(params.amount * 100),
+        currency: params.currency ?? 'INR',
+        receipt: `vidur_${randomUUID()}`,
+        notes: {
+          merchantId: params.merchantId,
+          customerId: params.customerId ?? '',
+          customerName: params.customerName ?? '',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay order creation failed: ${errorBody}`,
+      );
+    }
+
+    return (await response.json()) as RazorpayOrder;
+  }
+
+  /**
+   * What the frontend needs to open Razorpay Checkout.js for a real Test
+   * Mode payment attempt: an order id and the public key id (never the
+   * secret).
+   */
+  async createCheckoutOrder(params: {
+    merchantId: string;
+    amount: number;
+    customerName?: string;
+  }): Promise<CreateCheckoutOrderResult> {
+    if (!this.keyId) {
+      throw new InternalServerErrorException(
+        'Razorpay credentials are not configured.',
+      );
+    }
+
+    const order = await this.createOrder(params);
+
+    return {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: this.keyId,
+    };
+  }
+
+  /**
+   * Verifies X-Razorpay-Signature against the raw (unparsed) request body,
+   * per Razorpay's documented webhook verification: HMAC-SHA256 of the raw
+   * body using the dashboard-configured webhook secret, compared to the
+   * header. Constant-time compare to avoid timing attacks.
+   */
+  verifyWebhookSignature(
+    rawBody: Buffer,
+    signature: string | undefined,
+  ): boolean {
+    if (!this.webhookSecret || !signature) {
+      return false;
+    }
+
+    const expected = createHmac('sha256', this.webhookSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    const signatureBuffer = Buffer.from(signature, 'utf8');
+
+    if (expectedBuffer.length !== signatureBuffer.length) {
+      return false;
+    }
+
+    return timingSafeEqual(expectedBuffer, signatureBuffer);
   }
 }

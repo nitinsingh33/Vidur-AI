@@ -1,27 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle,
+  ArrowRight,
   Bot,
   CheckCircle2,
   Loader2,
   Play,
+  ShieldCheck,
   Sparkles,
+  Zap,
 } from 'lucide-react'
 import {
   createRecoveryStrategy,
   executeRecoveryAction,
+  getRecoveryCase,
   observeRecovery,
   runAgentRecovery,
   type AgentRecoveryResult,
   type RecoveryAction,
+  type RecoveryCase,
   type RecoveryOutcome,
 } from '../../api/recoveryCases'
 import { Button } from '../ui/button'
 import { useAuth } from '../../context/AuthContext'
 import { formatAmount, formatLabel } from '../../lib/status'
+import { deriveAgentPipeline } from '../../lib/agentPipeline'
+import { AgentExecutionTimeline } from './AgentExecutionTimeline'
+import { AgentGuardrails } from './AgentGuardrails'
 
 interface VidurRecoveryPanelProps {
-  recoveryCaseId: string
+  recoveryCase: RecoveryCase
   onCompleted?: () => void
 }
 
@@ -34,20 +41,43 @@ type PanelState =
   | 'observing'
   | 'completed'
   | 'agent-running'
-  | 'escalated'
+
+const POLL_INTERVAL_MS = 1200
 
 export function VidurRecoveryPanel({
-  recoveryCaseId,
+  recoveryCase,
   onCompleted,
 }: VidurRecoveryPanelProps) {
   const { token } = useAuth()
-  const [agentResult, setAgentResult] = useState<AgentRecoveryResult | null>(
-    null,
-  )
+
   const [state, setState] = useState<PanelState>('idle')
   const [action, setAction] = useState<RecoveryAction | null>(null)
   const [outcome, setOutcome] = useState<RecoveryOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const [caseSnapshot, setCaseSnapshot] =
+    useState<RecoveryCase>(recoveryCase)
+
+  const [initialSnapshot, setInitialSnapshot] =
+    useState<RecoveryCase | null>(null)
+
+  const [agentResult, setAgentResult] =
+    useState<AgentRecoveryResult | null>(null)
+
+  const [isAgentRunning, setIsAgentRunning] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!isAgentRunning) {
+      setCaseSnapshot(recoveryCase)
+    }
+  }, [recoveryCase, isAgentRunning])
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
 
   async function handleGenerateStrategy() {
     if (!token) return
@@ -55,7 +85,12 @@ export function VidurRecoveryPanel({
     try {
       setError(null)
       setState('generating')
-      const result = await createRecoveryStrategy(token, recoveryCaseId)
+
+      const result = await createRecoveryStrategy(
+        token,
+        recoveryCase.id,
+      )
+
       setAction(result)
       setState('ready')
     } catch (err) {
@@ -74,7 +109,12 @@ export function VidurRecoveryPanel({
     try {
       setError(null)
       setState('executing')
-      const result = await executeRecoveryAction(token, recoveryCaseId)
+
+      const result = await executeRecoveryAction(
+        token,
+        recoveryCase.id,
+      )
+
       setAction(result)
       setState('executed')
     } catch (err) {
@@ -93,7 +133,12 @@ export function VidurRecoveryPanel({
     try {
       setError(null)
       setState('observing')
-      const result = await observeRecovery(token, recoveryCaseId)
+
+      const result = await observeRecovery(
+        token,
+        recoveryCase.id,
+      )
+
       setOutcome(result)
       setState('completed')
       onCompleted?.()
@@ -110,210 +155,311 @@ export function VidurRecoveryPanel({
   async function handleRunAgent() {
     if (!token) return
 
+    setError(null)
+    setAgentResult(null)
+    setInitialSnapshot(caseSnapshot)
+    setIsAgentRunning(true)
+    setState('agent-running')
+
+    pollRef.current = setInterval(() => {
+      getRecoveryCase(token, recoveryCase.id)
+        .then(setCaseSnapshot)
+        .catch(() => {})
+    }, POLL_INTERVAL_MS)
+
     try {
-      setError(null)
-      setState('agent-running')
-      const result = await runAgentRecovery(token, recoveryCaseId)
+      const result = await runAgentRecovery(
+        token,
+        recoveryCase.id,
+      )
+
+      const finalSnapshot = await getRecoveryCase(
+        token,
+        recoveryCase.id,
+      )
+
+      setCaseSnapshot(finalSnapshot)
       setAgentResult(result)
+      setState('idle')
 
       if (result.success === true) {
-        setState('completed')
-        onCompleted?.()
-      } else {
-        setState('escalated')
+        setTimeout(() => onCompleted?.(), 3000)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Agent recovery failed.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Agent recovery failed.',
+      )
       setState('idle')
+    } finally {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+
+      setIsAgentRunning(false)
     }
   }
 
-  const actionLabel = action?.type ? formatLabel(action.type) : 'Recovery action'
+  const actionLabel = action?.type
+    ? formatLabel(action.type)
+    : 'Recovery action'
+
+  const hasPipelineData =
+    isAgentRunning ||
+    agentResult !== null ||
+    caseSnapshot.actions.length > 0
+
+  const { stages, finalOutcome, guardrails } = hasPipelineData
+    ? deriveAgentPipeline({
+        recoveryCase: caseSnapshot,
+        initialSnapshot,
+        agentResult,
+        isRunning: isAgentRunning,
+      })
+    : {
+        stages: [],
+        finalOutcome: null,
+        guardrails: [],
+      }
 
   return (
-    <article className="relative mt-6 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary via-primary/60 to-primary" />
+    <section className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
 
-      <div className="flex items-center justify-between gap-5 border-b border-border px-6 py-5">
+      <header className="flex flex-col gap-4 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Bot size={20} />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <Bot size={19} />
           </div>
+
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-              Vidur AI
-            </p>
-            <h2 className="text-[15px] font-semibold text-foreground">
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                Vidur AI
+              </p>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                LIVE
+              </span>
+            </div>
+
+            <h2 className="mt-0.5 text-[15px] font-semibold text-foreground">
               Recovery intelligence
             </h2>
           </div>
         </div>
 
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <span className="relative flex size-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
-          </span>
-          Agent ready
-        </span>
-      </div>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <ShieldCheck size={14} />
+          Policy-controlled execution
+        </div>
+      </header>
 
-      <div className="p-6">
+      <div className="p-5 sm:p-6">
         {state === 'idle' && (
-          <>
-            <div className="mb-5 flex items-start gap-3.5">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Sparkles size={17} />
+          <div className="grid gap-4 lg:grid-cols-[1fr_1.15fr]">
+            <div className="rounded-2xl border border-border bg-secondary/20 p-5">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm">
+                <Sparkles size={16} />
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">
-                  Recommended next step
-                </span>
-                <strong className="block text-[15px] font-semibold text-foreground">
-                  Generate recovery strategy
-                </strong>
-                <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                  Vidur will evaluate this recovery case and select the
-                  appropriate intervention.
+
+              <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Controlled recovery
+              </p>
+
+              <h3 className="mt-1 text-base font-semibold text-foreground">
+                Review each decision
+              </h3>
+
+              <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                Generate the recommended intervention, review policy,
+                execute it, and explicitly observe the result.
+              </p>
+
+              <Button
+                className="mt-5 w-full sm:w-auto"
+                onClick={handleGenerateStrategy}
+              >
+                <Sparkles size={15} />
+                Generate strategy
+              </Button>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-primary/[0.045] p-5">
+              <div className="absolute -right-10 -top-10 size-32 rounded-full bg-primary/[0.08] blur-3xl" />
+
+              <div className="relative">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Zap size={16} />
+                </div>
+
+                <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-primary">
+                  Autonomous mode
                 </p>
+
+                <h3 className="mt-1 text-base font-semibold text-foreground">
+                  Let Vidur run the full recovery
+                </h3>
+
+                <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                  Diagnose the case, select an intervention, evaluate
+                  guardrails, execute when allowed, and observe the outcome.
+                </p>
+
+                <Button
+                  variant="outline"
+                  className="mt-5 w-full border-primary/20 bg-background/60 sm:w-auto"
+                  onClick={handleRunAgent}
+                >
+                  <Bot size={15} />
+                  Run full agent
+                  <ArrowRight size={14} />
+                </Button>
               </div>
             </div>
-
-            <Button onClick={handleGenerateStrategy}>
-              <Sparkles size={16} />
-              Generate Strategy
-            </Button>
-
-            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              or run full agent
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            <Button variant="outline" onClick={handleRunAgent}>
-              <Bot size={16} />
-              Run Full Agent Recovery
-            </Button>
-          </>
+          </div>
         )}
 
         {(state === 'generating' ||
           state === 'executing' ||
-          state === 'observing' ||
-          state === 'agent-running') && (
-          <div className="flex min-h-18 items-center gap-2.5 text-sm text-muted-foreground">
-            <Loader2 size={19} className="animate-spin" />
-            <span>
-              {state === 'generating' &&
-                'Vidur is evaluating the recovery case...'}
-              {state === 'executing' &&
-                'Vidur is executing the recovery action...'}
-              {state === 'observing' &&
-                'Vidur is recording the recovery outcome...'}
-              {state === 'agent-running' &&
-                'Agent is running full recovery workflow...'}
-            </span>
+          state === 'observing') && (
+          <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/20">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Loader2 size={19} className="animate-spin" />
+              </div>
+
+              <p className="mt-4 text-sm font-medium text-foreground">
+                {state === 'generating' &&
+                  'Evaluating the recovery case'}
+                {state === 'executing' &&
+                  'Executing the recovery action'}
+                {state === 'observing' &&
+                  'Recording the recovery outcome'}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vidur is working with the persisted case state.
+              </p>
+            </div>
           </div>
         )}
 
         {state === 'ready' && action && (
-          <>
-            <div className="mb-5 rounded-lg border border-border bg-secondary/40 p-4">
-              <span className="block text-xs text-muted-foreground">
-                Recommended action
-              </span>
-              <strong className="mt-1 block text-[15px] font-semibold text-foreground">
-                {actionLabel}
-              </strong>
-
-              {action.reason && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {action.reason}
+          <div className="rounded-2xl border border-primary/15 bg-primary/[0.035] p-5">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-primary">
+                  Recommended intervention
                 </p>
-              )}
+
+                <h3 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
+                  {actionLabel}
+                </h3>
+
+                {action.reason && (
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {action.reason}
+                  </p>
+                )}
+              </div>
 
               {action.policyDecision && (
-                <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400">
+                <div className="flex shrink-0 items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={14} />
-                  Policy: <strong>{action.policyDecision}</strong>
+                  Policy {action.policyDecision}
                 </div>
               )}
             </div>
 
-            <Button onClick={handleExecute}>
-              <Play size={16} />
-              Execute Recovery
-            </Button>
-          </>
-        )}
-
-        {state === 'executed' && action && (
-          <>
-            <div className="mb-5 flex items-start gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-4 text-emerald-400">
-              <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
-              <div>
-                <strong className="block text-sm font-semibold">
-                  Recovery action executed
-                </strong>
-                <span className="mt-1 block text-xs opacity-90">
-                  {action.result?.message ??
-                    'The recovery action has completed.'}
-                </span>
-              </div>
-            </div>
-
-            <Button onClick={handleObserve}>
-              <Play size={16} />
-              Observe Recovery
-            </Button>
-          </>
-        )}
-
-        {state === 'completed' && outcome && (
-          <div className="flex items-start gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-4 text-emerald-400">
-            <CheckCircle2 size={22} className="mt-0.5 shrink-0" />
-            <div>
-              <strong className="block text-sm font-semibold">
-                {outcome.successful
-                  ? 'Recovery completed'
-                  : 'Recovery unsuccessful'}
-              </strong>
-              <span className="mt-1 block text-xs opacity-90">
-                {outcome.successful
-                  ? `${formatAmount(outcome.recoveredAmount)} recovered`
-                  : 'No revenue was recovered.'}
-              </span>
+            <div className="mt-5 border-t border-primary/10 pt-4">
+              <Button onClick={handleExecute}>
+                <Play size={15} />
+                Execute recovery
+              </Button>
             </div>
           </div>
         )}
 
-        {state === 'escalated' && agentResult && (
-          <div className="flex items-start gap-3.5 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4 text-amber-400">
-            <AlertTriangle size={22} className="mt-0.5 shrink-0" />
-            <div>
-              <strong className="block text-sm font-semibold">
-                Escalated to human review
-              </strong>
-              <span className="mt-1 block text-xs opacity-90">
-                {agentResult.policy_decision === 'DENY'
-                  ? 'Policy blocked this intervention.'
-                  : 'Recovery exhausted — case escalated.'}
-              </span>
-              {agentResult.candidate_intervention && (
-                <span className="mt-1 block text-xs opacity-60">
-                  Attempted: {formatLabel(agentResult.candidate_intervention)}
-                </span>
-              )}
+        {state === 'executed' && action && (
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                <CheckCircle2 size={18} />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  Recovery action executed
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {action.result?.message ??
+                    'The recovery action has completed.'}
+                </p>
+
+                <Button className="mt-4" onClick={handleObserve}>
+                  <Play size={15} />
+                  Observe recovery
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {state === 'completed' && outcome && (
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                <CheckCircle2 size={18} />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {outcome.successful
+                    ? 'Recovery completed'
+                    : 'Recovery unsuccessful'}
+                </p>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {outcome.successful
+                    ? `${formatAmount(outcome.recoveredAmount)} recovered`
+                    : 'No revenue was recovered.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hasPipelineData && (
+          <div className="mt-5">
+            <AgentExecutionTimeline
+              stages={stages}
+              finalOutcome={finalOutcome}
+              guardrails={guardrails}
+              running={isAgentRunning}
+            />
+
+            <AgentGuardrails guardrails={guardrails} />
+          </div>
+        )}
+
+        {state === 'agent-running' && !hasPipelineData && (
+          <div className="flex min-h-24 items-center justify-center">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={18} className="animate-spin" />
+              Starting agent…
             </div>
           </div>
         )}
 
         {error && (
-          <div className="mt-4 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mt-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
       </div>
-    </article>
+    </section>
   )
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useState } from 'react'
 
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
@@ -24,6 +24,7 @@ import { AgentActivity } from './pages/AgentActivity'
 import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
 import { Settings } from './pages/Settings'
+import { DemoDetection } from './pages/DemoDetection'
 
 import './index.css'
 
@@ -37,11 +38,13 @@ function AppShell() {
         onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenuClick={() => setMobileNavOpen(true)} />
+      <div className="flex min-w-0 flex-1 flex-col min-h-screen bg-background">
+        <Topbar
+          onMenuClick={() => setMobileNavOpen(true)}
+        />
 
-        <main className="flex-1 overflow-x-hidden px-6 py-8 md:px-10">
-          <div className="mx-auto max-w-[1400px]">
+        <main className="min-h-[calc(100vh-68px)] flex-1 overflow-x-hidden px-4 py-7 sm:px-6 md:px-8 lg:px-10 lg:py-8">
+          <div className="mx-auto w-full max-w-[1400px]">
             <Routes>
               {/* Dashboard */}
               <Route
@@ -89,6 +92,12 @@ function AppShell() {
                 element={<Settings />}
               />
 
+              {/* Development/demo-only: Feature #1 live detection demo */}
+              <Route
+                path="/demo-detection"
+                element={<DemoDetection />}
+              />
+
               {/* Unknown protected route */}
               <Route
                 path="*"
@@ -98,8 +107,8 @@ function AppShell() {
           </div>
         </main>
 
-        <footer className="border-t border-border px-6 py-4 md:px-10">
-          <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left">
+        <footer className="border-t border-border">
+          <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 text-center sm:flex-row sm:px-6 sm:text-left lg:px-10">
             <span className="text-xs text-muted-foreground">
               © 2026 Vidur AI
             </span>
@@ -119,6 +128,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
+
         <Routes>
           {/* ───────────────── Public marketing ───────────────── */}
 
