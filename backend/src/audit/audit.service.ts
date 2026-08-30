@@ -28,9 +28,9 @@ export class AuditService {
     });
   }
 
-  findByCase(recoveryCaseId: string) {
+  findByCase(recoveryCaseId: string, merchantId: string) {
     return this.prisma.auditLog.findMany({
-      where: { recoveryCaseId },
+      where: { recoveryCaseId, merchantId },
       orderBy: { createdAt: 'asc' },
     });
   }

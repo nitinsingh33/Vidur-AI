@@ -37,3 +37,19 @@ export async function getAuditLog(
 
   return response.json()
 }
+
+export async function getCaseAuditTrail(
+  token: string,
+  recoveryCaseId: string,
+): Promise<AuditLogEntry[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/audit/cases/${recoveryCaseId}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+
+  if (!response.ok) {
+    throw new Error(`Audit trail request failed: ${response.status}`)
+  }
+
+  return response.json()
+}

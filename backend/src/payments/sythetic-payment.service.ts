@@ -83,7 +83,9 @@ export class SyntheticPaymentService {
     const nextAttemptNumber = payment.attemptNumber + 1;
 
     const eligibleChannels =
-      RECOVERY_MATRIX[payment.failureReason ?? ''] ?? ['SEND_PAYMENT_LINK'];
+      RECOVERY_MATRIX[(payment.failureReason ?? '').toUpperCase()] ?? [
+        'SEND_PAYMENT_LINK',
+      ];
     const successful = eligibleChannels.includes(channel);
 
     const successMessage = `${label} succeeded.`;

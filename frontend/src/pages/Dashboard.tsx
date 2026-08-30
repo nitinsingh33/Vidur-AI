@@ -77,9 +77,9 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           escalatedCases,
           decisions,
         ] = await Promise.all([
-          getRevenueAtRisk(),
-          getRevenueRecovered(),
-          getAnalyticsSummary(),
+          getRevenueAtRisk(token as string),
+          getRevenueRecovered(token as string),
+          getAnalyticsSummary(token as string),
           getRecoveryCases(token as string, { limit: 5 }),
           getRecoveryCases(token as string, {
             riskLevel: 'CRITICAL',
@@ -146,7 +146,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
         }, ${formatAmount(
           revenueAtRisk.revenueAtRisk,
         )} at risk right now.`
-      : 'Monitor revenue recovery and agent activity in real time.'
+      : 'Your recovery activity at a glance.'
 
   return (
     <section className="pb-12">

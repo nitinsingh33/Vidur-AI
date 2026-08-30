@@ -2,11 +2,26 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 const toneStyles = {
-  primary: 'bg-primary/10 text-primary',
-  emerald: 'bg-emerald-500/10 text-emerald-400',
-  amber: 'bg-amber-500/10 text-amber-400',
-  rose: 'bg-rose-500/10 text-rose-400',
-  sky: 'bg-sky-500/10 text-sky-400',
+  primary: {
+    icon: 'text-primary',
+    iconHover: 'group-hover:text-primary',
+  },
+  emerald: {
+    icon: 'text-emerald-600',
+    iconHover: 'group-hover:text-emerald-600',
+  },
+  amber: {
+    icon: 'text-amber-600',
+    iconHover: 'group-hover:text-amber-600',
+  },
+  rose: {
+    icon: 'text-rose-600',
+    iconHover: 'group-hover:text-rose-600',
+  },
+  sky: {
+    icon: 'text-sky-600',
+    iconHover: 'group-hover:text-sky-600',
+  },
 } as const
 
 interface MetricCardProps {
@@ -24,29 +39,40 @@ export function MetricCard({
   icon: Icon,
   tone = 'primary',
 }: MetricCardProps) {
+  const styles = toneStyles[tone]
+
   return (
-    <article className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-colors hover:border-border/80">
-      <div className="flex items-start justify-between">
-        <span className="text-sm font-medium text-muted-foreground">
+    <article
+      className={cn(
+        'group relative rounded-xl border border-border bg-card px-5 py-5',
+        'transition-all duration-200',
+        'hover:-translate-y-[1px] hover:border-border/80 hover:shadow-[0_4px_18px_rgba(0,0,0,0.035)]',
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <span className="text-[13px] font-medium text-muted-foreground">
           {label}
         </span>
 
-        <div
+        <Icon
+          size={18}
+          strokeWidth={1.8}
           className={cn(
-            'flex size-8 shrink-0 items-center justify-center rounded-lg',
-            toneStyles[tone],
+            'shrink-0 transition-colors duration-200',
+            styles.icon,
+            styles.iconHover,
           )}
-        >
-          <Icon size={16} strokeWidth={2} />
+        />
+      </div>
+
+      <div className="mt-5">
+        <div className="text-[27px] font-semibold leading-none tracking-[-0.035em] text-foreground">
+          {value}
         </div>
-      </div>
 
-      <div className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
-        {value}
-      </div>
-
-      <div className="mt-1.5 text-xs text-muted-foreground">
-        {description}
+        <div className="mt-2 text-xs leading-5 text-muted-foreground">
+          {description}
+        </div>
       </div>
     </article>
   )

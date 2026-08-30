@@ -18,8 +18,11 @@ import {
 import { MetricCard } from '../components/dashboard/MetricCard'
 import { Skeleton } from '../components/ui/skeleton'
 import { formatAmount } from '../lib/status'
+import { useAuth } from '../context/AuthContext'
 
 export function Analytics() {
+  const { token } = useAuth()
+
   const [revenueAtRisk, setRevenueAtRisk] =
     useState<RevenueAtRiskResponse | null>(null)
   const [revenueRecovered, setRevenueRecovered] =
@@ -31,12 +34,14 @@ export function Analytics() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!token) return
+
     async function load() {
       try {
         const [risk, recovered, summaryData] = await Promise.all([
-          getRevenueAtRisk(),
-          getRevenueRecovered(),
-          getAnalyticsSummary(),
+          getRevenueAtRisk(token as string),
+          getRevenueRecovered(token as string),
+          getAnalyticsSummary(token as string),
         ])
 
         setRevenueAtRisk(risk)
@@ -52,7 +57,7 @@ export function Analytics() {
     }
 
     load()
-  }, [])
+  }, [token])
 
   const atRiskAmount = Number(revenueAtRisk?.revenueAtRisk ?? 0)
   const recoveredAmount = Number(revenueRecovered?.revenueRecovered ?? 0)

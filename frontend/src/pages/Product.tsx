@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef } from "react";
 import {
   Activity,
   ArrowRight,
@@ -15,148 +15,148 @@ import {
   Target,
   TrendingUp,
   Zap,
-} from 'lucide-react'
+} from "lucide-react";
 import {
   motion,
   useReducedMotion,
   useScroll,
   useSpring,
   useTransform,
-} from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { Button } from '../components/ui/button'
-import { LandingNavbar } from '../components/landing/LandingNavbar'
-import { LandingFooter } from '../components/landing/LandingFooter'
+} from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import { LandingNavbar } from "../components/landing/LandingNavbar";
+import { LandingFooter } from "../components/landing/LandingFooter";
 
 const capabilities = [
   {
-    id: 'recovery-engine',
+    id: "recovery-engine",
     icon: CircleDollarSign,
-    eyebrow: '01',
-    title: 'Recovery case detection',
+    eyebrow: "01",
+    title: "Recovery case detection",
     description:
-      'Turn failed payments, abandoned checkouts, and overdue invoices into structured recovery cases with revenue-at-risk and recovery probability.',
+      "Turn failed payments, abandoned checkouts, and overdue invoices into structured recovery cases with revenue-at-risk and recovery probability.",
     items: [
-      'Failed payment detection',
-      'Checkout abandonment detection',
-      'Overdue invoice detection',
-      'Risk level assessment',
+      "Failed payment detection",
+      "Checkout abandonment detection",
+      "Overdue invoice detection",
+      "Risk level assessment",
     ],
   },
   {
-    id: 'ai-decisioning',
+    id: "ai-decisioning",
     icon: Target,
-    eyebrow: '02',
-    title: 'Context-aware decisioning',
+    eyebrow: "02",
+    title: "Context-aware decisioning",
     description:
-      'Vidur evaluates payment amount, failure reason, payment method, customer history, retry history, and recovery probability before selecting a recovery strategy.',
+      "Vidur evaluates payment amount, failure reason, payment method, customer history, retry history, and recovery probability before selecting a recovery strategy.",
     items: [
-      'Customer payment history',
-      'Failure reason',
-      'Retry context',
-      'Recovery probability',
+      "Customer payment history",
+      "Failure reason",
+      "Retry context",
+      "Recovery probability",
     ],
   },
   {
-    id: 'orchestration',
+    id: "orchestration",
     icon: Network,
-    eyebrow: '03',
-    title: 'Bounded recovery orchestration',
+    eyebrow: "03",
+    title: "Bounded recovery orchestration",
     description:
-      'Selected actions pass through policy checks before execution. Recovery attempts are bounded so a failing workflow cannot continue indefinitely.',
+      "Selected actions pass through policy checks before execution. Recovery attempts are bounded so a failing workflow cannot continue indefinitely.",
     items: [
-      'Policy validation',
-      'Retry limits',
-      'Amount limits',
-      'Human escalation',
+      "Policy validation",
+      "Retry limits",
+      "Amount limits",
+      "Human escalation",
     ],
   },
   {
-    id: 'analytics',
+    id: "analytics",
     icon: BarChart3,
-    eyebrow: '04',
-    title: 'Outcome & observability',
+    eyebrow: "04",
+    title: "Outcome & observability",
     description:
-      'Every recovery case carries its decision, policy result, execution state, outcome, and audit history so teams can understand what happened.',
+      "Every recovery case carries its decision, policy result, execution state, outcome, and audit history so teams can understand what happened.",
     items: [
-      'Recovery outcomes',
-      'Action history',
-      'Policy decisions',
-      'Audit trail',
+      "Recovery outcomes",
+      "Action history",
+      "Policy decisions",
+      "Audit trail",
     ],
   },
-]
+];
 
 const actionRows = [
   {
-    cause: 'Insufficient funds',
-    action: 'Retry payment',
-    tone: 'primary',
+    cause: "Insufficient funds",
+    action: "Retry payment",
+    tone: "primary",
   },
   {
-    cause: 'Network error',
-    action: 'Retry payment',
-    tone: 'primary',
+    cause: "Network error",
+    action: "Retry payment",
+    tone: "primary",
   },
   {
-    cause: 'Card expired',
-    action: 'Update payment method',
-    tone: 'blue',
+    cause: "Card expired",
+    action: "Update payment method",
+    tone: "blue",
   },
   {
-    cause: 'Bank declined',
-    action: 'Update payment method',
-    tone: 'blue',
+    cause: "Bank declined",
+    action: "Update payment method",
+    tone: "blue",
   },
   {
-    cause: 'Checkout abandoned',
-    action: 'Send payment link',
-    tone: 'violet',
+    cause: "Checkout abandoned",
+    action: "Send payment link",
+    tone: "violet",
   },
   {
-    cause: 'Invoice overdue',
-    action: 'Follow up receivable',
-    tone: 'amber',
+    cause: "Invoice overdue",
+    action: "Follow up receivable",
+    tone: "amber",
   },
   {
-    cause: 'Repeated failure',
-    action: 'Escalate to human',
-    tone: 'slate',
+    cause: "Repeated failure",
+    action: "Escalate to human",
+    tone: "slate",
   },
-]
+];
 
 const infrastructure = [
   {
     icon: Zap,
-    title: 'NestJS',
-    text: 'Business and recovery orchestration layer.',
+    title: "NestJS",
+    text: "Business and recovery orchestration layer.",
   },
   {
     icon: Sparkles,
-    title: 'LangGraph',
-    text: 'Stateful recovery workflow.',
+    title: "LangGraph",
+    text: "Stateful recovery workflow.",
   },
   {
     icon: Activity,
-    title: 'FastAPI + ML',
-    text: 'Recovery probability service.',
+    title: "FastAPI + ML",
+    text: "Recovery probability service.",
   },
   {
     icon: Database,
-    title: 'PostgreSQL',
-    text: 'Recovery and audit data layer.',
+    title: "PostgreSQL",
+    text: "Recovery and audit data layer.",
   },
   {
     icon: GitBranch,
-    title: 'BullMQ + Redis',
-    text: 'Asynchronous recovery processing.',
+    title: "BullMQ + Redis",
+    text: "Asynchronous recovery processing.",
   },
   {
     icon: ShieldCheck,
-    title: 'Policy engine',
-    text: 'Bounded action execution.',
+    title: "Policy engine",
+    text: "Bounded action execution.",
   },
-]
+];
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -164,42 +164,41 @@ function SectionLabel({ children }: { children: string }) {
       <span className="size-1.5 rounded-full bg-primary" />
       {children}
     </span>
-  )
+  );
 }
 
 function ProductVisual() {
-  const ref = useRef<HTMLDivElement>(null)
-  const shouldReduceMotion = useReducedMotion()
+  const ref = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const { scrollYProgress } = useScroll({
     target: ref,
-    offset: ['start end', 'end start'],
-  })
+    offset: ["start end", "end start"],
+  });
 
   const rotate = useTransform(
     scrollYProgress,
     [0, 0.5, 1],
     shouldReduceMotion ? [0, 0, 0] : [-2, 1.5, -2],
-  )
+  );
 
   const y = useTransform(
     scrollYProgress,
     [0, 0.5, 1],
     shouldReduceMotion ? [0, 0, 0] : [24, -8, 18],
-  )
+  );
 
   const smoothY = useSpring(y, {
     stiffness: 90,
     damping: 22,
     mass: 0.7,
-  })
+  });
 
   return (
     <motion.div
       ref={ref}
       style={{ rotate, y: smoothY }}
-      className="relative mx-auto w-full max-w-[570px]"
-    >
+      className="relative mx-auto w-full max-w-[570px]">
       <div className="absolute -inset-10 rounded-[40px] bg-primary/[0.08] blur-3xl" />
 
       <div className="relative overflow-hidden rounded-[26px] border border-border/80 bg-card shadow-[0_30px_90px_-35px_rgba(0,0,0,0.22)]">
@@ -216,7 +215,7 @@ function ProductVisual() {
             transition={{
               duration: 9,
               repeat: Infinity,
-              ease: 'easeInOut',
+              ease: "easeInOut",
             }}
           />
 
@@ -243,9 +242,7 @@ function ProductVisual() {
         <div className="p-5 sm:p-6">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-border p-4">
-              <p className="text-xs text-muted-foreground">
-                Revenue at risk
-              </p>
+              <p className="text-xs text-muted-foreground">Revenue at risk</p>
               <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
                 ₹12,499
               </p>
@@ -263,17 +260,14 @@ function ProductVisual() {
                 <p className="text-xl font-semibold tracking-tight text-foreground">
                   68%
                 </p>
-                <TrendingUp
-                  size={15}
-                  className="mb-1 text-primary"
-                />
+                <TrendingUp size={15} className="mb-1 text-primary" />
               </div>
 
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
                 <motion.div
                   className="h-full rounded-full bg-primary"
                   initial={{ width: 0 }}
-                  whileInView={{ width: '68%' }}
+                  whileInView={{ width: "68%" }}
                   viewport={{ once: true }}
                   transition={{
                     duration: 1.1,
@@ -290,26 +284,26 @@ function ProductVisual() {
             {[
               {
                 icon: Activity,
-                label: 'Context loaded',
-                value: 'Payment + customer history',
+                label: "Context loaded",
+                value: "Payment + customer history",
               },
               {
                 icon: Bot,
-                label: 'Recovery strategy',
-                value: 'Retry payment',
+                label: "Recovery strategy",
+                value: "Retry payment",
               },
               {
                 icon: ShieldCheck,
-                label: 'Policy check',
-                value: 'ALLOW',
+                label: "Policy check",
+                value: "ALLOW",
               },
               {
                 icon: Zap,
-                label: 'Next action',
-                value: 'Scheduled recovery',
+                label: "Next action",
+                value: "Scheduled recovery",
               },
             ].map((item, index) => {
-              const Icon = item.icon
+              const Icon = item.icon;
 
               return (
                 <motion.div
@@ -327,8 +321,7 @@ function ProductVisual() {
                   transition={{
                     duration: 0.45,
                     delay: index * 0.08,
-                  }}
-                >
+                  }}>
                   <div className="z-10 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-card text-primary">
                     <Icon size={14} />
                   </div>
@@ -342,7 +335,7 @@ function ProductVisual() {
                     </p>
                   </div>
                 </motion.div>
-              )
+              );
             })}
           </div>
 
@@ -361,30 +354,30 @@ function ProductVisual() {
         </div>
       </div>
     </motion.div>
-  )
+  );
 }
 
 export function Product() {
-  const navigate = useNavigate()
-  const heroRef = useRef<HTMLDivElement>(null)
-  const shouldReduceMotion = useReducedMotion()
+  const navigate = useNavigate();
+  const heroRef = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
-    offset: ['start start', 'end start'],
-  })
+    offset: ["start start", "end start"],
+  });
 
   const heroY = useTransform(
     scrollYProgress,
     [0, 1],
     shouldReduceMotion ? [0, 0] : [0, -70],
-  )
+  );
 
   const heroOpacity = useTransform(
     scrollYProgress,
     [0, 0.75, 1],
     shouldReduceMotion ? [1, 1, 1] : [1, 0.9, 0],
-  )
+  );
 
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
@@ -393,8 +386,7 @@ export function Product() {
       {/* Hero */}
       <section
         ref={heroRef}
-        className="relative overflow-hidden border-b border-border"
-      >
+        className="relative overflow-hidden border-b border-border">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute left-[10%] top-[-180px] h-[520px] w-[520px] rounded-full bg-primary/[0.09] blur-[130px]" />
           <div className="absolute right-[-10%] top-[10%] h-[500px] w-[500px] rounded-full bg-sky-400/[0.07] blur-[140px]" />
@@ -403,20 +395,18 @@ export function Product() {
             className="absolute inset-0 opacity-[0.22]"
             style={{
               backgroundImage:
-                'radial-gradient(circle, hsl(var(--foreground) / 0.22) 1px, transparent 1px)',
-              backgroundSize: '28px 28px',
-              maskImage:
-                'linear-gradient(to bottom, black, transparent 72%)',
+                "radial-gradient(circle, hsl(var(--foreground) / 0.22) 1px, transparent 1px)",
+              backgroundSize: "28px 28px",
+              maskImage: "linear-gradient(to bottom, black, transparent 72%)",
               WebkitMaskImage:
-                'linear-gradient(to bottom, black, transparent 72%)',
+                "linear-gradient(to bottom, black, transparent 72%)",
             }}
           />
         </div>
 
         <motion.div
           style={{ y: heroY, opacity: heroOpacity }}
-          className="relative mx-auto grid max-w-7xl items-center gap-14 px-6 pb-24 pt-20 lg:grid-cols-[1fr_0.9fr] lg:px-10 lg:pb-32 lg:pt-28"
-        >
+          className="relative mx-auto grid max-w-7xl items-center gap-14 px-6 pb-24 pt-20 lg:grid-cols-[1fr_0.9fr] lg:px-10 lg:pb-32 lg:pt-28">
           <div className="max-w-2xl">
             <motion.div
               initial={{
@@ -430,63 +420,51 @@ export function Product() {
               transition={{
                 duration: 0.65,
                 ease: [0.22, 1, 0.36, 1],
-              }}
-            >
+              }}>
               <SectionLabel>Recovery platform</SectionLabel>
             </motion.div>
 
             <h1 className="mt-6 max-w-3xl text-[46px] font-semibold leading-[0.98] tracking-[-0.045em] text-foreground sm:text-[62px] lg:text-[72px]">
-              The decision layer between{' '}
+              The decision layer between{" "}
               <span className="bg-gradient-to-r from-primary via-primary to-sky-500 bg-clip-text text-transparent">
                 payment failure
-              </span>{' '}
+              </span>{" "}
               and recovery.
             </h1>
 
             <p className="mt-7 max-w-xl text-base leading-7 text-muted-foreground sm:text-[17px]">
-              Vidur turns revenue-risk signals into bounded recovery
-              workflows — combining customer context, recovery probability,
-              strategy selection, policy checks, execution, and outcome
-              tracking.
+              Vidur turns revenue-risk signals into bounded recovery workflows —
+              combining customer context, recovery probability, strategy
+              selection, policy checks, execution, and outcome tracking.
             </p>
 
             <div className="mt-9 flex flex-wrap gap-3">
               <Button
                 size="lg"
                 className="h-11 px-6"
-                onClick={() => navigate('/signup')}
-              >
-                  Get started
-                  <ArrowRight size={16} />
+                onClick={() => navigate("/signup")}>
+                Get started
+                <ArrowRight size={16} />
               </Button>
 
               <Button
                 size="lg"
                 variant="outline"
                 className="h-11 px-6"
-                onClick={() => navigate('/how-it-works')}
-              >
-                  See how it works
+                onClick={() => navigate("/how-it-works")}>
+                See how it works
               </Button>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-xs text-muted-foreground">
-              {[
-                'Context-aware',
-                'Policy-controlled',
-                'Fully observable',
-              ].map((item) => (
-                <span
-                  key={item}
-                  className="flex items-center gap-2"
-                >
-                  <CheckCircle2
-                    size={14}
-                    className="text-primary"
-                  />
-                  {item}
-                </span>
-              ))}
+              {["Context-aware", "Policy-controlled", "Fully observable"].map(
+                (item) => (
+                  <span key={item} className="flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-primary" />
+                    {item}
+                  </span>
+                ),
+              )}
             </div>
           </div>
 
@@ -506,15 +484,15 @@ export function Product() {
 
             <p className="mt-5 text-[15px] leading-7 text-muted-foreground">
               A recovery case carries the information needed to decide what
-              should happen next. Vidur evaluates the case, selects a
-              strategy, checks whether that action is permitted, executes it,
-              and records the result.
+              should happen next. Vidur evaluates the case, selects a strategy,
+              checks whether that action is permitted, executes it, and records
+              the result.
             </p>
           </div>
 
           <div className="mt-14 grid gap-5 lg:grid-cols-2">
             {capabilities.map((item, index) => {
-              const Icon = item.icon
+              const Icon = item.icon;
 
               return (
                 <motion.article
@@ -523,11 +501,11 @@ export function Product() {
                   className="group relative scroll-mt-28 overflow-hidden rounded-[24px] border border-border bg-card p-6 sm:p-8"
                   initial={{
                     opacity: 0,
-                    clipPath: 'inset(10% 0% 0% 0% round 24px)',
+                    clipPath: "inset(10% 0% 0% 0% round 24px)",
                   }}
                   whileInView={{
                     opacity: 1,
-                    clipPath: 'inset(0% 0% 0% 0% round 24px)',
+                    clipPath: "inset(0% 0% 0% 0% round 24px)",
                   }}
                   viewport={{
                     once: true,
@@ -540,8 +518,7 @@ export function Product() {
                   }}
                   whileHover={{
                     y: -4,
-                  }}
-                >
+                  }}>
                   <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-primary/[0.045] blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
 
                   <div className="relative">
@@ -567,8 +544,7 @@ export function Product() {
                       {item.items.map((entry) => (
                         <div
                           key={entry}
-                          className="flex items-center gap-2 text-xs text-muted-foreground"
-                        >
+                          className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="size-1.5 rounded-full bg-primary/60" />
                           {entry}
                         </div>
@@ -576,7 +552,7 @@ export function Product() {
                     </div>
                   </div>
                 </motion.article>
-              )
+              );
             })}
           </div>
         </div>
@@ -595,8 +571,8 @@ export function Product() {
 
               <p className="mt-5 text-[15px] leading-7 text-muted-foreground">
                 Vidur's current recovery strategy service maps the diagnosed
-                root cause to an appropriate recovery action instead of
-                applying one retry rule to every case.
+                root cause to an appropriate recovery action instead of applying
+                one retry rule to every case.
               </p>
 
               <div className="mt-8 rounded-2xl border border-primary/15 bg-primary/[0.045] p-5">
@@ -611,9 +587,8 @@ export function Product() {
                       The action still needs policy approval.
                     </p>
                     <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                      If the configured policy blocks the action, Vidur
-                      routes the case toward escalation instead of executing
-                      it.
+                      If the configured policy blocks the action, Vidur routes
+                      the case toward escalation instead of executing it.
                     </p>
                   </div>
                 </div>
@@ -646,8 +621,7 @@ export function Product() {
                     transition={{
                       duration: 0.45,
                       delay: index * 0.045,
-                    }}
-                  >
+                    }}>
                     <div className="flex items-center gap-3">
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
                         <CircleDollarSign size={13} />
@@ -685,10 +659,10 @@ export function Product() {
               </h2>
 
               <p className="mt-5 max-w-xl text-[15px] leading-7 text-muted-foreground">
-                Vidur uses the AI layer to generate a concise diagnosis of
-                why a case is at risk and why the selected action makes
-                sense. The deterministic recovery strategy and policy layer
-                remain responsible for what can actually execute.
+                Vidur uses the AI layer to generate a concise diagnosis of why a
+                case is at risk and why the selected action makes sense. The
+                deterministic recovery strategy and policy layer remain
+                responsible for what can actually execute.
               </p>
 
               <div className="mt-8 flex flex-wrap gap-3">
@@ -722,21 +696,20 @@ export function Product() {
                 <div className="mt-5 rounded-2xl bg-secondary/45 p-5">
                   <p className="text-sm leading-6 text-foreground">
                     “The payment failed because of insufficient funds. The
-                    customer has prior successful payments, making a later
-                    retry a reasonable recovery path.”
+                    customer has prior successful payments, making a later retry
+                    a reasonable recovery path.”
                   </p>
                 </div>
 
                 <div className="mt-4 grid gap-2">
                   {[
-                    ['Strategy', 'RETRY_PAYMENT'],
-                    ['Policy', 'ALLOW'],
-                    ['Execution', 'SCHEDULED'],
+                    ["Strategy", "RETRY_PAYMENT"],
+                    ["Policy", "ALLOW"],
+                    ["Execution", "SCHEDULED"],
                   ].map(([label, value]) => (
                     <div
                       key={label}
-                      className="flex items-center justify-between rounded-xl border border-border px-4 py-3"
-                    >
+                      className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
                       <span className="text-xs text-muted-foreground">
                         {label}
                       </span>
@@ -761,9 +734,8 @@ export function Product() {
                 transition={{
                   duration: 4,
                   repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-              >
+                  ease: "easeInOut",
+                }}>
                 <Sparkles size={18} />
               </motion.div>
             </div>
@@ -783,15 +755,15 @@ export function Product() {
 
             <p className="mt-5 text-[15px] leading-7 text-muted-foreground">
               The product is not a frontend-only simulation. Recovery cases,
-              policies, actions, outcomes, and audit events live in the
-              backend data model and the agent communicates with the business
-              layer through defined service boundaries.
+              policies, actions, outcomes, and audit events live in the backend
+              data model and the agent communicates with the business layer
+              through defined service boundaries.
             </p>
           </div>
 
           <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {infrastructure.map((item, index) => {
-              const Icon = item.icon
+              const Icon = item.icon;
 
               return (
                 <motion.div
@@ -812,12 +784,8 @@ export function Product() {
                   transition={{
                     duration: 0.5,
                     delay: index * 0.05,
-                  }}
-                >
-                  <Icon
-                    size={18}
-                    className="text-primary"
-                  />
+                  }}>
+                  <Icon size={18} className="text-primary" />
 
                   <h3 className="mt-4 text-sm font-semibold text-foreground">
                     {item.title}
@@ -827,16 +795,13 @@ export function Product() {
                     {item.text}
                   </p>
                 </motion.div>
-              )
+              );
             })}
           </div>
 
           <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-border bg-background p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <ShieldCheck
-                size={18}
-                className="mt-0.5 shrink-0 text-primary"
-              />
+              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary" />
 
               <div>
                 <p className="text-sm font-semibold text-foreground">
@@ -869,17 +834,16 @@ export function Product() {
             </h2>
 
             <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
-              Explore the workflow, inspect the recovery model, and connect
-              the product to your recovery operations.
+              Explore the workflow, inspect the recovery model, and connect the
+              product to your recovery operations.
             </p>
 
             <Button
               size="lg"
               className="mt-8 h-11 px-6"
-              onClick={() => navigate('/signup')}
-            >
-                Get started
-                <ArrowRight size={16} />
+              onClick={() => navigate("/signup")}>
+              Get started
+              <ArrowRight size={16} />
             </Button>
           </div>
         </div>
@@ -887,5 +851,5 @@ export function Product() {
 
       <LandingFooter />
     </div>
-  )
+  );
 }
