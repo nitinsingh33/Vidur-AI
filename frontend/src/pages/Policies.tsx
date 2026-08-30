@@ -36,111 +36,127 @@ export function Policies() {
 
   return (
     <section className="pb-12">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-          Recovery intelligence
+      <header className="border-b border-border pb-5">
+        <div className="flex items-center gap-2">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ShieldCheck size={16} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Recovery intelligence
+            </p>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-[-0.03em] text-foreground">
+              Policies
+            </h1>
+          </div>
+        </div>
+
+        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+          Control the actions Vidur is allowed to take during recovery.
         </p>
-        <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground">
-          Policies
-        </h1>
-        <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
-          The guardrails Vidur checks every recovery action against before it
-          executes.
-        </p>
-      </div>
+      </header>
 
       {loading && (
-        <div className="mt-8 grid grid-cols-1 gap-3.5 md:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-40 rounded-xl" />
+        <div className="mt-6 space-y-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-[104px] rounded-xl" />
           ))}
         </div>
       )}
 
       {error && (
-        <div className="mt-8 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="mt-6 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
       {!loading && !error && policies.length === 0 && (
-        <div className="mt-8 rounded-xl border border-border bg-card p-8 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center">
           <div className="mx-auto flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <ShieldCheck size={18} />
           </div>
           <p className="mt-3 text-sm font-medium text-foreground">
-            No policies configured yet
+            No policies configured
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Without a policy for an action type, Vidur blocks it by default
-            until one is added.
+            Vidur blocks actions by default when no policy exists.
           </p>
         </div>
       )}
 
       {!loading && !error && policies.length > 0 && (
-        <div className="mt-8 grid grid-cols-1 gap-3.5 md:grid-cols-2">
-          {policies.map((policy) => (
-            <article
-              key={policy.id}
-              className="rounded-xl border border-border bg-card p-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <strong className="text-sm font-semibold text-foreground">
-                    {policy.name}
-                  </strong>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatLabel(policy.actionType)}
-                  </p>
-                </div>
+        <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card">
+          {policies.map((policy, index) => {
+            const limits = [
+              policy.maxRetries !== null && policy.maxRetries !== undefined
+                ? { label: 'Retries', value: policy.maxRetries }
+                : null,
+              policy.maxContacts !== null &&
+              policy.maxContacts !== undefined
+                ? { label: 'Contacts', value: policy.maxContacts }
+                : null,
+              policy.maxAmount
+                ? { label: 'Max amount', value: formatAmount(policy.maxAmount) }
+                : null,
+            ].filter(Boolean) as { label: string; value: string | number }[]
 
-                <div className="flex flex-col items-end gap-1.5">
+            return (
+              <article
+                key={policy.id}
+                className={`px-4 py-4 sm:px-5 ${
+                  index > 0 ? 'border-t border-border' : ''
+                }`}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-semibold text-foreground">
+                        {policy.name}
+                      </h2>
+
+                      <StatusBadge
+                        label={policy.enabled ? 'Enabled' : 'Disabled'}
+                        tone={policy.enabled ? 'emerald' : 'neutral'}
+                      />
+                    </div>
+
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatLabel(policy.actionType)}
+                    </p>
+
+                    {policy.description && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {policy.description}
+                      </p>
+                    )}
+                  </div>
+
                   <StatusBadge
                     label={policy.decision}
                     tone={policyTone(policy.decision)}
                   />
-                  <StatusBadge
-                    label={policy.enabled ? 'ENABLED' : 'DISABLED'}
-                    tone={policy.enabled ? 'emerald' : 'neutral'}
-                  />
                 </div>
-              </div>
 
-              {policy.description && (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {policy.description}
-                </p>
-              )}
-
-              <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-3.5">
-                <div>
-                  <dt className="text-[11px] text-muted-foreground">
-                    Max retries
-                  </dt>
-                  <dd className="mt-0.5 text-sm font-medium text-foreground">
-                    {policy.maxRetries ?? '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] text-muted-foreground">
-                    Max contacts
-                  </dt>
-                  <dd className="mt-0.5 text-sm font-medium text-foreground">
-                    {policy.maxContacts ?? '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] text-muted-foreground">
-                    Max amount
-                  </dt>
-                  <dd className="mt-0.5 text-sm font-medium text-foreground">
-                    {policy.maxAmount ? formatAmount(policy.maxAmount) : '—'}
-                  </dd>
-                </div>
-              </dl>
-            </article>
-          ))}
+                {limits.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-border pt-3">
+                    {limits.map((limit) => (
+                      <div
+                        key={limit.label}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <span className="text-muted-foreground">
+                          {limit.label}
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {limit.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
