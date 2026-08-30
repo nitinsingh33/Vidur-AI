@@ -14,6 +14,8 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       process.env.FRONTEND_URL ?? 'http://localhost:5173',
+      'https://vidurai.co.in',
+      'https://www.vidurai.co.in',
       /^https:\/\/vidur-ai-git-.*\.vercel\.app$/,
     ],
   });
