@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import {
   approveRecoveryAction,
+  checkPolicy,
   createRecoveryStrategy,
   executeRecoveryAction,
   getRecoveryCase,
@@ -94,12 +95,30 @@ export function VidurRecoveryPanel({
       setError(null)
       setState('generating')
 
-      const result = await createRecoveryStrategy(
+      const strategy = await createRecoveryStrategy(
         token,
         recoveryCase.id,
       )
 
-      setAction(result)
+      /*
+       * The autonomous agent run evaluates policy as one of its own steps;
+       * this manual path must do the same thing explicitly — execute
+       * refuses to run anything whose policyDecision isn't ALLOW yet, and
+       * nothing else sets it for a manually-generated action.
+       */
+      const policy = await checkPolicy(
+        token,
+        recoveryCase.id,
+        strategy.type,
+      )
+
+      setAction({ ...strategy, policyDecision: policy.decision })
+
+      // Refresh so the REQUIRE_APPROVAL card (driven by caseSnapshot,
+      // not this action state) picks up the freshly-evaluated action too.
+      const freshCase = await getRecoveryCase(token, recoveryCase.id)
+      setCaseSnapshot(freshCase)
+
       setState('ready')
     } catch (err) {
       setError(
@@ -466,18 +485,40 @@ export function VidurRecoveryPanel({
               </div>
 
               {action.policyDecision && (
-                <div className="flex shrink-0 items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 size={14} />
-                  Policy {action.policyDecision}
+                <div
+                  className={
+                    action.policyDecision === 'ALLOW'
+                      ? 'flex shrink-0 items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400'
+                      : 'flex shrink-0 items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400'
+                  }
+                >
+                  {action.policyDecision === 'ALLOW' ? (
+                    <CheckCircle2 size={14} />
+                  ) : (
+                    <ShieldAlert size={14} />
+                  )}
+                  Policy {formatLabel(action.policyDecision)}
                 </div>
               )}
             </div>
 
             <div className="mt-5 border-t border-primary/10 pt-4">
-              <Button onClick={handleExecute}>
-                <Play size={15} />
-                Execute recovery
-              </Button>
+              {action.policyDecision === 'ALLOW' ? (
+                <Button onClick={handleExecute}>
+                  <Play size={15} />
+                  Execute recovery
+                </Button>
+              ) : action.policyDecision === 'REQUIRE_APPROVAL' ? (
+                <p className="text-sm text-muted-foreground">
+                  This action needs approval before it can run — see "Awaiting
+                  human approval" above.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Policy blocked this intervention. No further action will be
+                  taken automatically.
+                </p>
+              )}
             </div>
           </div>
         )}

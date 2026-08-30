@@ -53,14 +53,20 @@ export class RiskService {
     return { successfulPaymentCount, failedPaymentCount };
   }
 
-  async assessPayment(paymentId: string) {
+  /**
+   * merchantId is only passed by the JWT-facing controller — internal
+   * callers (the webhook, the checkout sweep, batch detection) already
+   * resolved the id from data they scoped to the right merchant themselves,
+   * so they call these without it.
+   */
+  async assessPayment(paymentId: string, merchantId?: string) {
     const payment = await this.prisma.payment.findUnique({
       where: {
         id: paymentId,
       },
     });
 
-    if (!payment) {
+    if (!payment || (merchantId && payment.merchantId !== merchantId)) {
       throw new NotFoundException(`Payment ${paymentId} not found.`);
     }
 
@@ -132,12 +138,12 @@ export class RiskService {
    * single Payment. There's nothing to retry — the customer never started
    * paying — so this is detected from the Order side, not the Payment side.
    */
-  async assessOrderAbandonment(orderId: string) {
+  async assessOrderAbandonment(orderId: string, merchantId?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
 
-    if (!order) {
+    if (!order || (merchantId && order.merchantId !== merchantId)) {
       throw new NotFoundException(`Order ${orderId} not found.`);
     }
 
@@ -221,12 +227,12 @@ export class RiskService {
    * Overdue receivable: an Invoice past due with no associated Payment.
    * Recovery here means the invoice itself gets paid, not a Payment retry.
    */
-  async assessInvoiceOverdue(invoiceId: string) {
+  async assessInvoiceOverdue(invoiceId: string, merchantId?: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
     });
 
-    if (!invoice) {
+    if (!invoice || (merchantId && invoice.merchantId !== merchantId)) {
       throw new NotFoundException(`Invoice ${invoiceId} not found.`);
     }
 

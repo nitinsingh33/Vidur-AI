@@ -16,7 +16,8 @@ describe('RiskEngineService', () => {
     });
 
     expect(result.recoveryProbability).toBe(0.8);
-    expect(result.revenueAtRisk).toBe(10000);
+    expect(result.expectedLoss).toBe(10000);
+    expect(result.revenueAtRisk).toBe(50000);
     expect(result.riskLevel).toBe('HIGH');
   });
 
@@ -29,7 +30,8 @@ describe('RiskEngineService', () => {
     });
 
     expect(result.recoveryProbability).toBe(0.1);
-    expect(result.revenueAtRisk).toBe(45000);
+    expect(result.expectedLoss).toBe(45000);
+    expect(result.revenueAtRisk).toBe(50000);
     expect(result.riskLevel).toBe('CRITICAL');
   });
 

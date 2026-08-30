@@ -34,7 +34,28 @@ export class RecoveryService {
     private readonly razorpayService: RazorpayService,
   ) {}
 
-  async getCaseById(recoveryCaseId: string) {
+  /**
+   * merchantId is only provided for JWT-authenticated callers (the agent
+   * authenticates with its own shared token and legitimately needs
+   * unrestricted access — see AgentOrJwtGuard). When present, a case
+   * belonging to a different merchant is reported as not found rather than
+   * forbidden, so a merchant can't use this to confirm another merchant's
+   * case id exists.
+   */
+  private assertOwnership<T extends { merchantId: string }>(
+    recoveryCase: T | null,
+    recoveryCaseId: string,
+    merchantId?: string,
+  ): asserts recoveryCase is T {
+    if (
+      !recoveryCase ||
+      (merchantId && recoveryCase.merchantId !== merchantId)
+    ) {
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
+    }
+  }
+
+  async getCaseById(recoveryCaseId: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id: recoveryCaseId,
@@ -53,9 +74,7 @@ export class RecoveryService {
       },
     });
 
-    if (!recoveryCase) {
-      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
-    }
+    this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
 
     return recoveryCase;
   }
@@ -171,16 +190,14 @@ export class RecoveryService {
     };
   }
 
-  async createStrategyForCase(recoveryCaseId: string) {
+  async createStrategyForCase(recoveryCaseId: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id: recoveryCaseId,
       },
     });
 
-    if (!recoveryCase) {
-      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
-    }
+    this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
 
     const strategy = this.strategyService.determine(recoveryCase.rootCause);
 
@@ -226,7 +243,7 @@ export class RecoveryService {
     return action;
   }
 
-  async executeRecoveryAction(recoveryCaseId: string) {
+  async executeRecoveryAction(recoveryCaseId: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: { id: recoveryCaseId },
       include: {
@@ -242,9 +259,7 @@ export class RecoveryService {
       },
     });
 
-    if (!recoveryCase) {
-      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
-    }
+    this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
 
     if (
       recoveryCase.status === 'RECOVERED' ||
@@ -603,7 +618,7 @@ export class RecoveryService {
     };
   }
 
-  async observeRecovery(recoveryCaseId: string) {
+  async observeRecovery(recoveryCaseId: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id: recoveryCaseId,
@@ -620,9 +635,7 @@ export class RecoveryService {
       },
     });
 
-    if (!recoveryCase) {
-      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
-    }
+    this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
 
     if (recoveryCase.outcome) {
       return recoveryCase.outcome;
@@ -795,7 +808,14 @@ export class RecoveryService {
    * JWT can walk through to trigger it, mirroring what
    * RecoveryQueueProcessor already does for the batch path.
    */
-  async runAgent(recoveryCaseId: string) {
+  async runAgent(recoveryCaseId: string, merchantId: string) {
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
+      where: { id: recoveryCaseId },
+      select: { merchantId: true },
+    });
+
+    this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
+
     const agentServiceUrl =
       process.env.AGENT_SERVICE_URL ?? 'http://localhost:8001';
 

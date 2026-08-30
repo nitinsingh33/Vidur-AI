@@ -165,6 +165,39 @@ export async function createRecoveryStrategy(
   return response.json()
 }
 
+export interface PolicyCheckResult {
+  decision: string
+  policyId: string
+  reason: string
+}
+
+/**
+ * The manual "Generate strategy -> review -> Execute" flow must call this
+ * itself before execute — unlike the autonomous agent run (which evaluates
+ * policy as one of its own graph steps), nothing else does this for a
+ * manually-generated action, and /execute will refuse to run anything whose
+ * policyDecision hasn't been set to ALLOW.
+ */
+export async function checkPolicy(
+  token: string,
+  recoveryCaseId: string,
+  actionType: string,
+): Promise<PolicyCheckResult> {
+  const response = await fetch(
+    `${API_BASE_URL}/policies/check/${recoveryCaseId}/${actionType}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(`Policy check failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
 export async function executeRecoveryAction(
   token: string,
   recoveryCaseId: string,

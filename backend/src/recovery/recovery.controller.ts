@@ -25,10 +25,14 @@ export class RecoveryController {
   @Get('cases/:recoveryCaseId')
   @UseGuards(AgentOrJwtGuard)
   getCase(
+    @Req() request: Request & { user?: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.recoveryService.getCaseById(recoveryCaseId);
+    return this.recoveryService.getCaseById(
+      recoveryCaseId,
+      request.user?.merchantId,
+    );
   }
 
   @Get('cases/:recoveryCaseId/ml-features')
@@ -56,37 +60,53 @@ export class RecoveryController {
   @Post('cases/:recoveryCaseId/strategy')
   @UseGuards(AgentOrJwtGuard)
   createStrategy(
+    @Req() request: Request & { user?: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.recoveryService.createStrategyForCase(recoveryCaseId);
+    return this.recoveryService.createStrategyForCase(
+      recoveryCaseId,
+      request.user?.merchantId,
+    );
   }
 
   @Post('cases/:recoveryCaseId/execute')
   @UseGuards(AgentOrJwtGuard)
   executeRecoveryAction(
+    @Req() request: Request & { user?: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.recoveryService.executeRecoveryAction(recoveryCaseId);
+    return this.recoveryService.executeRecoveryAction(
+      recoveryCaseId,
+      request.user?.merchantId,
+    );
   }
 
   @Post('cases/:recoveryCaseId/observe')
   @UseGuards(AgentOrJwtGuard)
   observeRecovery(
+    @Req() request: Request & { user?: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.recoveryService.observeRecovery(recoveryCaseId);
+    return this.recoveryService.observeRecovery(
+      recoveryCaseId,
+      request.user?.merchantId,
+    );
   }
 
   @Post('cases/:recoveryCaseId/run-agent')
   @UseGuards(JwtAuthGuard)
   runAgent(
+    @Req() request: Request & { user: AuthenticatedUser },
     @Param('recoveryCaseId', new ParseUUIDPipe())
     recoveryCaseId: string,
   ) {
-    return this.recoveryService.runAgent(recoveryCaseId);
+    return this.recoveryService.runAgent(
+      recoveryCaseId,
+      request.user.merchantId,
+    );
   }
 
   @Post('cases/:recoveryCaseId/actions/:actionId/approve')
