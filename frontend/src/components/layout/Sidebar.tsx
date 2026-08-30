@@ -6,6 +6,7 @@ import {
   Layers,
   ShieldCheck,
   Settings as SettingsIcon,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -67,6 +68,16 @@ const navGroups: NavGroup[] = [
         label: 'Recovery Policies',
         icon: ShieldCheck,
         path: '/policies',
+      },
+    ],
+  },
+  {
+    label: 'Live Test',
+    items: [
+      {
+        label: 'Razorpay Live Demo',
+        icon: Zap,
+        path: '/demo-detection',
       },
     ],
   },
