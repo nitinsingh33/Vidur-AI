@@ -70,6 +70,10 @@ export class RazorpayWebhookService {
     signature: string | undefined,
     eventId: string | undefined,
   ) {
+    this.logger.log(
+      `Razorpay webhook received (eventId=${eventId ?? 'unknown'}).`,
+    );
+
     if (!rawBody) {
       throw new BadRequestException(
         'Missing raw request body; cannot verify webhook signature.',
@@ -83,10 +87,18 @@ export class RazorpayWebhookService {
       throw new UnauthorizedException('Invalid Razorpay webhook signature.');
     }
 
+    this.logger.log(
+      `Razorpay webhook signature verified (eventId=${eventId ?? 'unknown'}).`,
+    );
+
     const payload = JSON.parse(
       rawBody.toString('utf8'),
     ) as RazorpayWebhookPayload;
     const event = payload.event;
+
+    this.logger.log(
+      `Razorpay webhook event type: ${event} (eventId=${eventId ?? 'unknown'}).`,
+    );
 
     if (event !== 'payment.failed') {
       return {
@@ -226,7 +238,17 @@ export class RazorpayWebhookService {
       },
     });
 
+    this.logger.log(
+      `Persisted failed payment ${payment.id} (razorpayPaymentId=${razorpayPaymentId}, ` +
+        `merchantId=${merchantId}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
     const recoveryCase = await this.riskService.assessPayment(payment.id);
+
+    this.logger.log(
+      `Recovery case ${recoveryCase.id} created for payment ${payment.id} ` +
+        `(riskLevel=${recoveryCase.riskLevel}, eventId=${eventId ?? 'unknown'}).`,
+    );
 
     await this.auditService.record({
       merchantId,
