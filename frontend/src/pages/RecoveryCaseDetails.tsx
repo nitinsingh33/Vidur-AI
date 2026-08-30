@@ -50,6 +50,11 @@ export function RecoveryCaseDetails() {
   useEffect(() => {
     if (!token) return;
 
+    // Narrow into a local const: `token` is `string | null` on the outer
+    // scope, and TypeScript doesn't carry the `if (!token) return` guard's
+    // narrowing into this nested function.
+    const authToken = token;
+
     async function loadCase() {
       try {
         setLoading(true);
@@ -58,8 +63,8 @@ export function RecoveryCaseDetails() {
         if (!recoveryCaseId) return;
 
         const [data, events] = await Promise.all([
-          getRecoveryCase(token, recoveryCaseId),
-          getCaseAuditTrail(token, recoveryCaseId),
+          getRecoveryCase(authToken, recoveryCaseId),
+          getCaseAuditTrail(authToken, recoveryCaseId),
         ]);
 
         setRecoveryCase(data);
