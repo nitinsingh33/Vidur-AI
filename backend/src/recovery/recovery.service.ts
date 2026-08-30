@@ -12,6 +12,7 @@ import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
 import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notification/notification.service';
+import { RazorpayService } from '../razorpay/razorpay.service';
 
 @Injectable()
 export class RecoveryService {
@@ -24,6 +25,7 @@ export class RecoveryService {
     private readonly syntheticInvoiceService: SyntheticInvoiceService,
     private readonly notificationService: NotificationService,
     private readonly auditService: AuditService,
+    private readonly razorpayService: RazorpayService,
   ) {}
 
   async getCaseById(recoveryCaseId: string) {
@@ -224,6 +226,8 @@ export class RecoveryService {
       include: {
         payment: true,
         customer: true,
+        order: true,
+        invoice: true,
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -343,33 +347,47 @@ export class RecoveryService {
 
     try {
       /*
-       * SEND_EMAIL is a cross-cutting channel, not tied to any one case
-       * shape (a subscription or invoice case can be emailed just as
-       * easily as a payment case) — so it's checked first, ahead of the
-       * shape-based branches below. Everything else stays simulated:
-       * three case shapes, one action loop — a payment failure is
-       * retried on the Payment itself; checkout abandonment has no
-       * Payment yet (recovery creates one); an overdue invoice is
+       * SEND_EMAIL and SEND_PAYMENT_LINK are cross-cutting, real channels —
+       * not tied to any one case shape, and not simulated. They're checked
+       * first, ahead of the shape-based branches below. Everything else
+       * stays simulated: three case shapes, one action loop — a payment
+       * failure is retried on the Payment itself; checkout abandonment has
+       * no Payment yet (recovery creates one); an overdue invoice is
        * resolved on the Invoice directly. See SyntheticPaymentService /
        * SyntheticInvoiceService.
+       *
+       * SEND_PAYMENT_LINK creates and sends a real Razorpay Payment Link
+       * (RazorpayService.createPaymentLink) but deliberately does NOT touch
+       * Payment/Order/Invoice status — a link being sent is not revenue
+       * recovered. Only the payment_link.paid webhook
+       * (RazorpayWebhookService) is allowed to do that, once the customer
+       * has actually paid.
        */
       const result =
         action.type === 'SEND_EMAIL'
           ? await this.sendRecoveryEmail(recoveryCase, action)
-          : recoveryCase.payment
-            ? await this.syntheticPaymentService.attemptRecovery(
-                recoveryCase.payment.id,
-                action.type,
-              )
-            : recoveryCase.orderId
-              ? await this.syntheticPaymentService.attemptCheckoutRecovery(
-                  recoveryCase.orderId,
+          : action.type === 'SEND_PAYMENT_LINK'
+            ? await this.sendPaymentLink(recoveryCase, action)
+            : recoveryCase.payment
+              ? await this.syntheticPaymentService.attemptRecovery(
+                  recoveryCase.payment.id,
                   action.type,
                 )
-              : await this.syntheticInvoiceService.attemptRecovery(
-                  recoveryCase.invoiceId as string,
-                  action.type,
-                );
+              : recoveryCase.orderId
+                ? await this.syntheticPaymentService.attemptCheckoutRecovery(
+                    recoveryCase.orderId,
+                    action.type,
+                  )
+                : await this.syntheticInvoiceService.attemptRecovery(
+                    recoveryCase.invoiceId as string,
+                    action.type,
+                  );
+
+      const paymentLinkId = (result as { paymentLinkId?: string })
+        .paymentLinkId;
+      const paymentLinkShortUrl = (
+        result as { paymentLinkShortUrl?: string }
+      ).paymentLinkShortUrl;
 
       const completedAction = await this.prisma.recoveryAction.update({
         where: {
@@ -381,6 +399,12 @@ export class RecoveryService {
           result: {
             ...result,
           },
+          ...(paymentLinkId
+            ? {
+                externalReferenceId: paymentLinkId,
+                externalReferenceUrl: paymentLinkShortUrl ?? null,
+              }
+            : {}),
         },
       });
 
@@ -499,6 +523,75 @@ export class RecoveryService {
       reason: 'Recovery email sent via Resend.',
       message: 'Recovery email sent via Resend.',
       channel: action.type,
+    };
+  }
+
+  /**
+   * The other real (non-simulated) recovery channel: creates and sends an
+   * actual Razorpay Test/Live Mode Payment Link. Like sendRecoveryEmail,
+   * recoveredAmount is always 0 here — creating/sending a link isn't
+   * revenue recovered. Only RazorpayWebhookService, on a genuine
+   * payment_link.paid event, is allowed to capture the underlying
+   * Payment/Order/Invoice.
+   */
+  private async sendPaymentLink(
+    recoveryCase: {
+      id: string;
+      merchantId: string;
+      customer: { name: string; email: string | null; phone: string | null } | null;
+      payment: { amount: unknown } | null;
+      order: { amount: unknown } | null;
+      invoice: { amount: unknown } | null;
+    },
+    action: { type: string },
+  ) {
+    const customer = recoveryCase.customer;
+
+    if (!customer?.email && !customer?.phone) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: 'Customer has no email or phone on file; cannot send a payment link.',
+        message: 'Customer has no email or phone on file; cannot send a payment link.',
+        channel: action.type,
+      };
+    }
+
+    const amount = Number(
+      recoveryCase.payment?.amount ??
+        recoveryCase.order?.amount ??
+        recoveryCase.invoice?.amount ??
+        0,
+    );
+
+    if (!(amount > 0)) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: 'No positive amount available to create a payment link for.',
+        message: 'No positive amount available to create a payment link for.',
+        channel: action.type,
+      };
+    }
+
+    const link = await this.razorpayService.createPaymentLink({
+      amount,
+      description: 'Complete your payment — Vidur AI recovery',
+      customerName: customer.name,
+      customerEmail: customer.email ?? undefined,
+      customerPhone: customer.phone ?? undefined,
+      recoveryCaseId: recoveryCase.id,
+      merchantId: recoveryCase.merchantId,
+    });
+
+    return {
+      successful: true,
+      recoveredAmount: 0,
+      reason: `Payment link created and sent (${link.short_url}).`,
+      message: `Payment link created and sent (${link.short_url}).`,
+      channel: action.type,
+      paymentLinkId: link.id,
+      paymentLinkShortUrl: link.short_url,
     };
   }
 

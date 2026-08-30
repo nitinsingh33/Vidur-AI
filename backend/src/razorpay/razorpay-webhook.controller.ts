@@ -27,7 +27,7 @@ export class RazorpayWebhookController {
     @Headers('x-razorpay-signature') signature: string | undefined,
     @Headers('x-razorpay-event-id') eventId: string | undefined,
   ) {
-    return this.webhookService.handlePaymentFailedWebhook(
+    return this.webhookService.handleWebhook(
       request.rawBody,
       signature,
       eventId,

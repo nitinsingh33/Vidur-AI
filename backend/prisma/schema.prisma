@@ -345,11 +345,17 @@ model RecoveryAction {
   result         Json?
   createdAt      DateTime             @default(now())
 
+  /// Razorpay Payment Link id (e.g. plink_...) when type is SEND_PAYMENT_LINK.
+  /// Lets the payment_link.paid webhook find its way back to this action/case.
+  externalReferenceId  String?
+  externalReferenceUrl String?
+
   recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
 
   @@index([recoveryCaseId])
   @@index([status])
   @@index([type])
+  @@index([externalReferenceId])
 }
 
 model RecoveryOutcome {

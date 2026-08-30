@@ -29,11 +29,22 @@ interface RazorpayPaymentEntity {
   error_step?: string;
 }
 
+interface RazorpayPaymentLinkEntity {
+  id: string;
+  status?: string;
+  short_url?: string;
+  amount?: number;
+  notes?: Record<string, string>;
+}
+
 interface RazorpayWebhookPayload {
   event: string;
   payload?: {
     payment?: {
       entity?: RazorpayPaymentEntity;
+    };
+    payment_link?: {
+      entity?: RazorpayPaymentLinkEntity;
     };
   };
 }
@@ -47,11 +58,18 @@ const METHOD_MAP: Record<string, PaymentMethod> = {
 };
 
 /**
- * Real entry point for Feature #1 in production: turns a genuine Razorpay
- * `payment.failed` webhook into a Payment row and hands it to the
- * unmodified RiskService.assessPayment() pipeline, exactly like
- * DemoService.triggerPaymentFailure() does for the manual/demo path — the
- * only difference is where the FAILED Payment's data comes from.
+ * Real entry point for the webhook-driven recovery pipeline in production.
+ * One endpoint, two events handled:
+ *  - `payment.failed` turns a genuine Razorpay failure into a Payment row
+ *    and hands it to the unmodified RiskService.assessPayment() pipeline,
+ *    exactly like DemoService.triggerPaymentFailure() does for the
+ *    manual/demo path — the only difference is where the FAILED Payment's
+ *    data comes from.
+ *  - `payment_link.paid` is the ONLY thing allowed to mark a
+ *    SEND_PAYMENT_LINK recovery as actually successful — creating/sending
+ *    the link (RecoveryService.sendPaymentLink) never touches
+ *    Payment/Order/Invoice status by itself.
+ * Everything else is acknowledged (2xx) but not processed.
  */
 @Injectable()
 export class RazorpayWebhookService {
@@ -65,7 +83,7 @@ export class RazorpayWebhookService {
     private readonly auditService: AuditService,
   ) {}
 
-  async handlePaymentFailedWebhook(
+  async handleWebhook(
     rawBody: Buffer | undefined,
     signature: string | undefined,
     eventId: string | undefined,
@@ -100,12 +118,16 @@ export class RazorpayWebhookService {
       `Razorpay webhook event type: ${event} (eventId=${eventId ?? 'unknown'}).`,
     );
 
+    if (event === 'payment_link.paid') {
+      return this.handlePaymentLinkPaid(payload, eventId);
+    }
+
     if (event !== 'payment.failed') {
       return {
         received: true,
         processed: false,
         event,
-        reason: 'Event type not handled in Phase 1 (payment.failed only).',
+        reason: 'Event type not handled (payment.failed, payment_link.paid only).',
       };
     }
 
@@ -271,6 +293,191 @@ export class RazorpayWebhookService {
       razorpayPaymentId,
       razorpayOrderId,
       failureReason,
+    };
+  }
+
+  /**
+   * The only path allowed to turn a SEND_PAYMENT_LINK action into actual
+   * recovered revenue. Looks the paid link back up via
+   * RecoveryAction.externalReferenceId (stamped when the link was created —
+   * see RecoveryService.sendPaymentLink), then captures the underlying
+   * Payment/Order/Invoice and records the RecoveryOutcome — mirroring what
+   * RecoveryService.observeRecovery does for the simulated channels, but
+   * triggered by a genuine Razorpay confirmation instead of being computed
+   * on demand.
+   */
+  private async handlePaymentLinkPaid(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const linkEntity = payload.payload?.payment_link?.entity;
+
+    if (!linkEntity?.id) {
+      this.logger.warn(
+        `payment_link.paid webhook missing payment_link entity (eventId=${eventId ?? 'unknown'}).`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing payment_link entity.',
+      };
+    }
+
+    const action = await this.prisma.recoveryAction.findFirst({
+      where: { externalReferenceId: linkEntity.id },
+      include: {
+        recoveryCase: {
+          include: { payment: true, order: true, invoice: true, outcome: true },
+        },
+      },
+    });
+
+    if (!action) {
+      this.logger.warn(
+        `payment_link.paid webhook for unrecognized link ${linkEntity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized payment link — not created by this system.',
+      };
+    }
+
+    const recoveryCase = action.recoveryCase;
+
+    if (recoveryCase.outcome || recoveryCase.status === 'RECOVERED') {
+      this.logger.log(
+        `Duplicate payment_link.paid for link ${linkEntity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); case ${recoveryCase.id} already recovered.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        duplicate: true,
+        recoveryCaseId: recoveryCase.id,
+      };
+    }
+
+    const recoveredAmount = recoveryCase.payment
+      ? Number(recoveryCase.payment.amount)
+      : recoveryCase.order
+        ? Number(recoveryCase.order.amount)
+        : Number(recoveryCase.invoice?.amount ?? 0);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (recoveryCase.payment) {
+          await tx.payment.update({
+            where: { id: recoveryCase.payment.id },
+            data: { status: PaymentStatus.CAPTURED, failureReason: null },
+          });
+
+          await tx.paymentEvent.create({
+            data: {
+              paymentId: recoveryCase.payment.id,
+              type: 'CAPTURED',
+              reason: 'Captured via Razorpay Payment Link.',
+              metadata: {
+                source: 'razorpay_payment_link_webhook',
+                paymentLinkId: linkEntity.id,
+                razorpayEventId: eventId ?? null,
+              },
+            },
+          });
+
+          if (recoveryCase.payment.orderId) {
+            await tx.order.update({
+              where: { id: recoveryCase.payment.orderId },
+              data: { status: 'PAID' },
+            });
+          }
+        } else if (recoveryCase.orderId) {
+          await tx.payment.create({
+            data: {
+              merchantId: recoveryCase.merchantId,
+              customerId: recoveryCase.customerId,
+              orderId: recoveryCase.orderId,
+              amount: recoveryCase.order?.amount ?? 0,
+              currency: recoveryCase.order?.currency ?? 'INR',
+              method: 'OTHER',
+              status: PaymentStatus.CAPTURED,
+              attemptNumber: 1,
+              externalId: `plink_payment_${linkEntity.id}`,
+            },
+          });
+
+          await tx.order.update({
+            where: { id: recoveryCase.orderId },
+            data: { status: 'PAID' },
+          });
+        } else if (recoveryCase.invoiceId) {
+          await tx.invoice.update({
+            where: { id: recoveryCase.invoiceId },
+            data: { status: 'PAID', paidAt: new Date() },
+          });
+        }
+
+        await tx.recoveryOutcome.create({
+          data: {
+            recoveryCaseId: recoveryCase.id,
+            recoveredAmount,
+            successful: true,
+            recoveryMethod: 'SEND_PAYMENT_LINK',
+            recoveredAt: new Date(),
+          },
+        });
+
+        await tx.recoveryCase.update({
+          where: { id: recoveryCase.id },
+          data: { status: 'RECOVERED', closedAt: new Date() },
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Unique constraint')
+      ) {
+        // Lost a race against a concurrent delivery of the same event.
+        this.logger.log(
+          `Duplicate payment_link.paid for link ${linkEntity.id} ` +
+            `(eventId=${eventId ?? 'unknown'}); already recorded.`,
+        );
+        return {
+          received: true,
+          processed: false,
+          duplicate: true,
+          recoveryCaseId: recoveryCase.id,
+        };
+      }
+
+      throw error;
+    }
+
+    this.logger.log(
+      `Recovery case ${recoveryCase.id} marked RECOVERED via payment link ${linkEntity.id} ` +
+        `(amount=${recoveredAmount}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'RECOVERY_SUCCEEDED',
+      actorType: 'SYSTEM',
+      details: {
+        paymentLinkId: linkEntity.id,
+        recoveredAmount,
+        recoveryMethod: 'SEND_PAYMENT_LINK',
+        eventId: eventId ?? null,
+      },
+    });
+
+    return {
+      received: true,
+      processed: true,
+      recoveryCaseId: recoveryCase.id,
+      recoveredAmount,
+      paymentLinkId: linkEntity.id,
     };
   }
 

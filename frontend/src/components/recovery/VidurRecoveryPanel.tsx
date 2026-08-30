@@ -399,6 +399,23 @@ export function VidurRecoveryPanel({
                     'The recovery action has completed.'}
                 </p>
 
+                {(action.result?.paymentLinkShortUrl ??
+                  action.externalReferenceUrl) && (
+                  <a
+                    href={
+                      action.result?.paymentLinkShortUrl ??
+                      action.externalReferenceUrl ??
+                      undefined
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block break-all text-sm font-medium text-primary hover:underline"
+                  >
+                    {action.result?.paymentLinkShortUrl ??
+                      action.externalReferenceUrl}
+                  </a>
+                )}
+
                 <Button className="mt-4" onClick={handleObserve}>
                   <Play size={15} />
                   Observe recovery

@@ -16,6 +16,14 @@ export interface CreateCheckoutOrderResult {
   keyId: string;
 }
 
+export interface RazorpayPaymentLink {
+  id: string;
+  short_url: string;
+  status: string;
+  amount: number;
+  currency: string;
+}
+
 @Injectable()
 export class RazorpayService {
   private readonly keyId = process.env.RAZORPAY_KEY_ID;
@@ -123,6 +131,63 @@ export class RazorpayService {
       currency: order.currency,
       keyId: this.keyId,
     };
+  }
+
+  /**
+   * Creates a real Razorpay Test/Live Mode Payment Link via the Payment
+   * Links API (POST /v1/payment_links/) — used by the SEND_PAYMENT_LINK
+   * recovery action. Razorpay itself delivers the notification (email/SMS)
+   * when notify.email/notify.sms are true, so no separate provider is
+   * needed for this channel. `notes.recoveryCaseId` lets the
+   * payment_link.paid webhook find its way back here as a fallback, but
+   * the primary lookup is RecoveryAction.externalReferenceId = link id.
+   */
+  async createPaymentLink(params: {
+    amount: number;
+    currency?: string;
+    description: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    recoveryCaseId: string;
+    merchantId: string;
+  }): Promise<RazorpayPaymentLink> {
+    const response = await fetch('https://api.razorpay.com/v1/payment_links/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${this.basicAuthHeader()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: Math.round(params.amount * 100),
+        currency: params.currency ?? 'INR',
+        description: params.description,
+        customer: {
+          name: params.customerName,
+          email: params.customerEmail,
+          contact: params.customerPhone,
+        },
+        notify: {
+          sms: Boolean(params.customerPhone),
+          email: Boolean(params.customerEmail),
+        },
+        reminder_enable: true,
+        notes: {
+          recoveryCaseId: params.recoveryCaseId,
+          merchantId: params.merchantId,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay payment link creation failed: ${errorBody}`,
+      );
+    }
+
+    return (await response.json()) as RazorpayPaymentLink;
   }
 
   /**

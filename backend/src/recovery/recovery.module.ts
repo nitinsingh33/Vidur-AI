@@ -6,9 +6,16 @@ import { PaymentsModule } from '../payments/payments.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
+import { RazorpayModule } from '../razorpay/razorpay.module';
 
 @Module({
-  imports: [PaymentsModule, InvoicesModule, AuthModule, NotificationModule],
+  imports: [
+    PaymentsModule,
+    InvoicesModule,
+    AuthModule,
+    NotificationModule,
+    RazorpayModule,
+  ],
   controllers: [RecoveryController],
   providers: [RecoveryService, RecoveryStrategyService],
   exports: [RecoveryService],

@@ -6,6 +6,7 @@ import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
 import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notification/notification.service';
+import { RazorpayService } from '../razorpay/razorpay.service';
 
 describe('RecoveryService', () => {
   let service: RecoveryService;
@@ -36,6 +37,10 @@ describe('RecoveryService', () => {
     sendRecoveryNotification: jest.fn(),
   } as unknown as NotificationService;
 
+  const razorpayService = {
+    createPaymentLink: jest.fn(),
+  } as unknown as RazorpayService;
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -46,6 +51,7 @@ describe('RecoveryService', () => {
       syntheticInvoiceService,
       notificationService,
       auditService,
+      razorpayService,
     );
   });
 

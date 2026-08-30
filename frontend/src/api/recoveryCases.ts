@@ -14,7 +14,12 @@ export interface RecoveryAction {
     message?: string
     successful?: boolean
     escalated?: boolean
+    paymentLinkId?: string
+    paymentLinkShortUrl?: string
   } | null
+
+  externalReferenceId?: string | null
+  externalReferenceUrl?: string | null
 }
 
 export interface PaymentEvent {

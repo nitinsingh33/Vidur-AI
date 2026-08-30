@@ -38,7 +38,7 @@ interface RazorpayCheckoutOptions {
   order_id: string
   name?: string
   description?: string
-  prefill?: { name?: string }
+  prefill?: { name?: string; email?: string; contact?: string }
   notes?: Record<string, string>
   theme?: { color?: string }
   modal?: { ondismiss?: () => void }
@@ -159,6 +159,8 @@ export function DemoDetection() {
   // creates asynchronously.
   const [liveAmount, setLiveAmount] = useState('25000')
   const [liveCustomerName, setLiveCustomerName] = useState('Vidur Live Customer')
+  const [liveCustomerEmail, setLiveCustomerEmail] = useState('')
+  const [liveCustomerPhone, setLiveCustomerPhone] = useState('')
   const [liveStage, setLiveStage] = useState<LiveStage>('idle')
   const [liveError, setLiveError] = useState<string | null>(null)
   const [clientFailure, setClientFailure] = useState<{
@@ -282,7 +284,11 @@ export function DemoDetection() {
         order_id: order.orderId,
         name: 'Vidur AI — Test Mode',
         description: 'Live Razorpay Test Mode payment attempt',
-        prefill: { name: liveCustomerName || undefined },
+        prefill: {
+          name: liveCustomerName || undefined,
+          email: liveCustomerEmail || undefined,
+          contact: liveCustomerPhone || undefined,
+        },
         theme: { color: '#6366f1' },
         modal: {
           ondismiss: () => {
@@ -482,6 +488,32 @@ export function DemoDetection() {
                   id="live-customer"
                   value={liveCustomerName}
                   onChange={(event) => setLiveCustomerName(event.target.value)}
+                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="live-customer-email">
+                  Customer email (for real recovery — payment link, notifications)
+                </Label>
+                <Input
+                  id="live-customer-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={liveCustomerEmail}
+                  onChange={(event) => setLiveCustomerEmail(event.target.value)}
+                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="live-customer-phone">Customer phone (for SMS delivery)</Label>
+                <Input
+                  id="live-customer-phone"
+                  type="tel"
+                  placeholder="+91XXXXXXXXXX"
+                  value={liveCustomerPhone}
+                  onChange={(event) => setLiveCustomerPhone(event.target.value)}
                   disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
                 />
               </div>
