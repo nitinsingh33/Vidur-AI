@@ -3,10 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RiskService } from '../risk/risk.service';
-import {
-  PaymentMethod,
-  PaymentStatus,
-} from '../generated/prisma/enums';
+import { AuditService } from '../audit/audit.service';
+import { PaymentMethod, PaymentStatus } from '../generated/prisma/enums';
 import { TriggerPaymentFailureDto } from './dto/trigger-payment-failure.dto';
 import {
   DEMO_CUSTOMER_EXTERNAL_ID,
@@ -28,6 +26,7 @@ export class DemoService {
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
     private readonly riskService: RiskService,
+    private readonly auditService: AuditService,
   ) {}
 
   private async getOrCreateDemoCustomer(
@@ -72,9 +71,7 @@ export class DemoService {
       externalId: `${DEMO_EXTERNAL_ID_PREFIX}${randomUUID()}`,
     });
 
-    const recoveryCase = await this.riskService.assessPayment(
-      payment.id,
-    );
+    const recoveryCase = await this.riskService.assessPayment(payment.id);
 
     return { payment, recoveryCase };
   }
@@ -127,6 +124,20 @@ export class DemoService {
           where: { id: { in: paymentIds } },
         }),
       ]);
+
+    // Recorded after the transaction — the very audit rows this action
+    // deletes are gone by then, which is correct: that history only ever
+    // existed while the demo data did.
+    await this.auditService.record({
+      merchantId,
+      action: 'DEMO_RESET',
+      actorType: 'SYSTEM',
+      details: {
+        paymentsDeleted: paymentsDeleted.count,
+        recoveryCasesDeleted: recoveryCasesDeleted.count,
+        auditLogsDeleted: auditLogsDeleted.count,
+      },
+    });
 
     return {
       paymentsDeleted: paymentsDeleted.count,

@@ -11,6 +11,7 @@ import { RecoveryStrategyService } from './recovery-strategy.service';
 import { SyntheticPaymentService } from '../payments/sythetic-payment.service';
 import { SyntheticInvoiceService } from '../invoices/synthetic-invoice.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class RecoveryService {
@@ -21,6 +22,7 @@ export class RecoveryService {
     private readonly strategyService: RecoveryStrategyService,
     private readonly syntheticPaymentService: SyntheticPaymentService,
     private readonly syntheticInvoiceService: SyntheticInvoiceService,
+    private readonly notificationService: NotificationService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -221,6 +223,7 @@ export class RecoveryService {
       where: { id: recoveryCaseId },
       include: {
         payment: true,
+        customer: true,
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -327,27 +330,46 @@ export class RecoveryService {
       },
     });
 
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'RECOVERY_ACTION_EXECUTION_STARTED',
+      actorType: 'AGENT',
+      details: {
+        actionId: action.id,
+        actionType: action.type,
+      },
+    });
+
     try {
       /*
-       * Three case shapes, one action loop: a payment failure is retried
-       * on the Payment itself; checkout abandonment has no Payment yet
-       * (recovery creates one); an overdue invoice is resolved on the
-       * Invoice directly. See SyntheticPaymentService / SyntheticInvoiceService.
+       * SEND_EMAIL is a cross-cutting channel, not tied to any one case
+       * shape (a subscription or invoice case can be emailed just as
+       * easily as a payment case) — so it's checked first, ahead of the
+       * shape-based branches below. Everything else stays simulated:
+       * three case shapes, one action loop — a payment failure is
+       * retried on the Payment itself; checkout abandonment has no
+       * Payment yet (recovery creates one); an overdue invoice is
+       * resolved on the Invoice directly. See SyntheticPaymentService /
+       * SyntheticInvoiceService.
        */
-      const result = recoveryCase.payment
-        ? await this.syntheticPaymentService.attemptRecovery(
-            recoveryCase.payment.id,
-            action.type,
-          )
-        : recoveryCase.orderId
-          ? await this.syntheticPaymentService.attemptCheckoutRecovery(
-              recoveryCase.orderId,
-              action.type,
-            )
-          : await this.syntheticInvoiceService.attemptRecovery(
-              recoveryCase.invoiceId as string,
-              action.type,
-            );
+      const result =
+        action.type === 'SEND_EMAIL'
+          ? await this.sendRecoveryEmail(recoveryCase, action)
+          : recoveryCase.payment
+            ? await this.syntheticPaymentService.attemptRecovery(
+                recoveryCase.payment.id,
+                action.type,
+              )
+            : recoveryCase.orderId
+              ? await this.syntheticPaymentService.attemptCheckoutRecovery(
+                  recoveryCase.orderId,
+                  action.type,
+                )
+              : await this.syntheticInvoiceService.attemptRecovery(
+                  recoveryCase.invoiceId as string,
+                  action.type,
+                );
 
       const completedAction = await this.prisma.recoveryAction.update({
         where: {
@@ -399,6 +421,9 @@ export class RecoveryService {
 
       return completedAction;
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Execution failed.';
+
       await this.prisma.recoveryAction.update({
         where: {
           id: action.id,
@@ -408,13 +433,73 @@ export class RecoveryService {
           completedAt: new Date(),
           result: {
             successful: false,
-            error: error instanceof Error ? error.message : 'Execution failed.',
+            error: errorMessage,
           },
+        },
+      });
+
+      await this.auditService.record({
+        merchantId: recoveryCase.merchantId,
+        recoveryCaseId: recoveryCase.id,
+        action: 'RECOVERY_ACTION_EXECUTION_FAILED',
+        actorType: 'AGENT',
+        details: {
+          actionId: action.id,
+          actionType: action.type,
+          error: errorMessage,
         },
       });
 
       throw error;
     }
+  }
+
+  /**
+   * The one real (non-simulated) recovery channel: sends an actual email
+   * via NotificationService/Resend. recoveredAmount is always 0 here —
+   * sending an email doesn't itself capture money; observeRecovery still
+   * independently decides "recovered" from the underlying payment/order/
+   * invoice state, so this can't perturb that state machine.
+   */
+  private async sendRecoveryEmail(
+    recoveryCase: {
+      rootCause: string | null;
+      revenueAtRisk: unknown;
+      customer: { email: string | null } | null;
+    },
+    action: { type: string },
+  ) {
+    const email = recoveryCase.customer?.email;
+
+    if (!email) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: 'Customer has no email on file.',
+        message: 'Customer has no email on file.',
+        channel: action.type,
+      };
+    }
+
+    const subject = 'Action needed to complete your payment';
+    const message =
+      `We noticed an issue with a recent transaction` +
+      `${recoveryCase.rootCause ? ` (${recoveryCase.rootCause.toLowerCase().replaceAll('_', ' ')})` : ''}. ` +
+      `Please review and complete your payment at your earliest convenience.`;
+
+    await this.notificationService.sendRecoveryNotification(
+      email,
+      subject,
+      message,
+    );
+
+    return {
+      successful: true,
+      recoveredAmount: 0,
+      reason: 'Recovery email sent via Resend.',
+      message: 'Recovery email sent via Resend.',
+      channel: action.type,
+    };
   }
 
   async observeRecovery(recoveryCaseId: string) {
@@ -465,15 +550,18 @@ export class RecoveryService {
         })
       : null;
 
-    const recoveredPayment = recoveryCase.payment?.status === 'CAPTURED'
-      ? recoveryCase.payment
-      : orderPayment;
+    const recoveredPayment =
+      recoveryCase.payment?.status === 'CAPTURED'
+        ? recoveryCase.payment
+        : orderPayment;
 
     const invoiceRecovered = recoveryCase.invoice?.status === 'PAID';
 
     const currentStatus = recoveredPayment
       ? recoveredPayment.status
-      : recoveryCase.invoice?.status ?? recoveryCase.payment?.status ?? 'PENDING';
+      : (recoveryCase.invoice?.status ??
+        recoveryCase.payment?.status ??
+        'PENDING');
 
     if (recoveredPayment || invoiceRecovered) {
       const successfulAction = recoveryCase.actions.find(

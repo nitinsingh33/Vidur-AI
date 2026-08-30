@@ -1,12 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
-import {
-  PolicyAction,
-  RecoveryActionType,
-} from '../generated/prisma/enums';
+import { PolicyAction, RecoveryActionType } from '../generated/prisma/enums';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -36,18 +30,18 @@ export class PolicyService {
     actionType: RecoveryActionType,
     amount: number,
     retryCount: number,
+    contactCount = 0,
   ): Promise<PolicyCheckResult> {
-    const policy =
-      await this.prisma.policy.findFirst({
-        where: {
-          merchantId,
-          actionType,
-          enabled: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+    const policy = await this.prisma.policy.findFirst({
+      where: {
+        merchantId,
+        actionType,
+        enabled: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
     if (!policy) {
       return {
@@ -57,45 +51,42 @@ export class PolicyService {
       };
     }
 
-    if (
-      policy.maxAmount !== null &&
-      amount > Number(policy.maxAmount)
-    ) {
+    if (policy.maxAmount !== null && amount > Number(policy.maxAmount)) {
       return {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
-        reason:
-          'Payment amount exceeds the policy limit.',
+        reason: 'Payment amount exceeds the policy limit.',
       };
     }
 
-    if (
-      policy.maxRetries !== null &&
-      retryCount > policy.maxRetries
-    ) {
+    if (policy.maxRetries !== null && retryCount > policy.maxRetries) {
       return {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
-        reason:
-          'Payment retry count exceeds the policy limit.',
+        reason: 'Payment retry count exceeds the policy limit.',
+      };
+    }
+
+    if (policy.maxContacts !== null && contactCount >= policy.maxContacts) {
+      return {
+        decision: PolicyAction.BLOCK,
+        policyId: policy.id,
+        reason: 'Customer contact limit for this channel has been reached.',
       };
     }
 
     return {
       decision: policy.decision,
       policyId: policy.id,
-      reason:
-        policy.description ??
-        'Policy decision applied.',
+      reason: policy.description ?? 'Policy decision applied.',
     };
   }
 
   async checkForRecoveryCase(
     recoveryCaseId: string,
     actionType: string,
-): Promise<PolicyCheckResult> {
-  const recoveryCase =
-    await this.prisma.recoveryCase.findUnique({
+  ): Promise<PolicyCheckResult> {
+    const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id: recoveryCaseId,
       },
@@ -104,62 +95,73 @@ export class PolicyService {
       },
     });
 
-  if (!recoveryCase) {
-    throw new NotFoundException(
-      `Recovery case ${recoveryCaseId} not found.`,
+    if (!recoveryCase) {
+      throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
+    }
+
+    const amount = recoveryCase.payment
+      ? Number(recoveryCase.payment.amount)
+      : Number(recoveryCase.revenueAtRisk);
+
+    const retryCount = recoveryCase.payment?.attemptNumber ?? 0;
+
+    /*
+     * Counts how many times this channel has actually been attempted for
+     * this case before (not just requested) — mirrors RecoveryService's own
+     * attempt-limit bookkeeping so maxContacts and the bounded-retry loop
+     * agree on what "an attempt" means.
+     */
+    const contactCount = await this.prisma.recoveryAction.count({
+      where: {
+        recoveryCaseId,
+        type: actionType as RecoveryActionType,
+        status: { in: ['EXECUTING', 'SUCCESS', 'FAILED'] },
+      },
+    });
+
+    const result = await this.check(
+      recoveryCase.merchantId,
+      actionType as RecoveryActionType,
+      amount,
+      retryCount,
+      contactCount,
     );
-  }
 
-  const amount = recoveryCase.payment
-    ? Number(recoveryCase.payment.amount)
-    : Number(recoveryCase.revenueAtRisk);
+    const action = await this.prisma.recoveryAction.findFirst({
+      where: {
+        recoveryCaseId,
+        type: actionType as RecoveryActionType,
+        status: 'PENDING',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
-  const retryCount =
-    recoveryCase.payment?.attemptNumber ?? 0;
+    if (action) {
+      await this.prisma.recoveryAction.update({
+        where: {
+          id: action.id,
+        },
+        data: {
+          policyDecision: result.decision,
+        },
+      });
+    }
 
-  const result = await this.check(
-  recoveryCase.merchantId,
-  actionType as RecoveryActionType,
-  amount,
-  retryCount,
-);
-
-const action =
-  await this.prisma.recoveryAction.findFirst({
-    where: {
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
       recoveryCaseId,
-      type: actionType as RecoveryActionType,
-      status: 'PENDING',
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+      action: 'POLICY_EVALUATED',
+      actorType: 'AGENT',
+      details: {
+        actionType,
+        decision: result.decision,
+        policyId: result.policyId,
+        reason: result.reason,
+      },
+    });
 
-if (action) {
-  await this.prisma.recoveryAction.update({
-    where: {
-      id: action.id,
-    },
-    data: {
-      policyDecision: result.decision,
-    },
-  });
-}
-
-await this.auditService.record({
-  merchantId: recoveryCase.merchantId,
-  recoveryCaseId,
-  action: 'POLICY_EVALUATED',
-  actorType: 'AGENT',
-  details: {
-    actionType,
-    decision: result.decision,
-    policyId: result.policyId,
-    reason: result.reason,
-  },
-});
-
-return result;
-}
+    return result;
+  }
 }

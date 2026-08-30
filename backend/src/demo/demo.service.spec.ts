@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RiskService } from '../risk/risk.service';
+import { AuditService } from '../audit/audit.service';
 import { DemoService } from './demo.service';
 import {
   DEMO_CUSTOMER_EXTERNAL_ID,
@@ -37,9 +38,18 @@ describe('DemoService', () => {
     assessPayment: jest.fn(),
   } as unknown as RiskService;
 
+  const auditService = {
+    record: jest.fn(),
+  } as unknown as AuditService;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new DemoService(prisma, paymentsService, riskService);
+    service = new DemoService(
+      prisma,
+      paymentsService,
+      riskService,
+      auditService,
+    );
   });
 
   describe('triggerPaymentFailure', () => {
@@ -53,13 +63,9 @@ describe('DemoService', () => {
         riskLevel: 'HIGH',
       };
 
-      (prisma.customer.upsert as jest.Mock).mockResolvedValue(
-        demoCustomer,
-      );
+      (prisma.customer.upsert as jest.Mock).mockResolvedValue(demoCustomer);
       (paymentsService.create as jest.Mock).mockResolvedValue(payment);
-      (riskService.assessPayment as jest.Mock).mockResolvedValue(
-        recoveryCase,
-      );
+      (riskService.assessPayment as jest.Mock).mockResolvedValue(recoveryCase);
 
       const result = await service.triggerPaymentFailure(merchantId, {
         amount: 25000,
@@ -95,9 +101,7 @@ describe('DemoService', () => {
 
       // The demo layer never touches revenueAtRisk/riskLevel itself — it
       // only forwards to the real RiskService and returns what comes back.
-      expect(riskService.assessPayment).toHaveBeenCalledWith(
-        payment.id,
-      );
+      expect(riskService.assessPayment).toHaveBeenCalledWith(payment.id);
       expect(result.recoveryCase).toBe(recoveryCase);
       expect(result.payment).toBe(payment);
     });
