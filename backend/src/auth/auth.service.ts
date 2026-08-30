@@ -11,6 +11,7 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { DEFAULT_POLICIES } from '../policy/default-policies';
 
 const PASSWORD_SALT_ROUNDS = 10;
 
@@ -58,21 +59,33 @@ export class AuthService {
     });
 
     if (existing) {
-      throw new ConflictException(
-        'An account with this email already exists.',
-      );
+      throw new ConflictException('An account with this email already exists.');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      PASSWORD_SALT_ROUNDS,
-    );
+    const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
 
     const merchant = await this.prisma.merchant.create({
       data: {
         name: dto.merchantName,
         email: dto.email,
       },
+    });
+
+    // Without this, PolicyService.check() finds no Policy row for this
+    // merchant and blocks every recovery action by default — the agent
+    // would escalate instead of ever executing anything.
+    await this.prisma.policy.createMany({
+      data: DEFAULT_POLICIES.map((policy) => ({
+        merchantId: merchant.id,
+        name: policy.name,
+        description: policy.description,
+        actionType: policy.actionType,
+        decision: policy.decision,
+        maxRetries: policy.maxRetries ?? null,
+        maxContacts: policy.maxContacts ?? null,
+        maxAmount: policy.maxAmount ?? null,
+        enabled: true,
+      })),
     });
 
     const user = await this.prisma.merchantUser.create({
