@@ -1,4 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  CheckCircle2,
+  Circle,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  RotateCcw,
+  Zap,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
   resetDemo,
@@ -14,14 +23,8 @@ import {
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../components/ui/card'
 import { formatAmount, formatLabel } from '../lib/status'
+import { cn } from '../lib/utils'
 
 const RAZORPAY_CHECKOUT_SCRIPT_SRC = 'https://checkout.razorpay.com/v1/checkout.js'
 
@@ -163,12 +166,6 @@ export function DemoDetection() {
   const [liveCustomerPhone, setLiveCustomerPhone] = useState('')
   const [liveStage, setLiveStage] = useState<LiveStage>('idle')
   const [liveError, setLiveError] = useState<string | null>(null)
-  const [clientFailure, setClientFailure] = useState<{
-    paymentId: string
-    orderId: string | null
-    reason?: string
-    description?: string
-  } | null>(null)
   const [detectedPayment, setDetectedPayment] = useState<PaymentWithCase | null>(null)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -250,7 +247,6 @@ export function DemoDetection() {
     if (!token) return
 
     setLiveError(null)
-    setClientFailure(null)
     setDetectedPayment(null)
     stopPolling()
 
@@ -304,12 +300,6 @@ export function DemoDetection() {
       rzp.on('payment.failed', (response) => {
         const { error: rzpError } = response
 
-        setClientFailure({
-          paymentId: rzpError.metadata?.payment_id ?? '',
-          orderId: rzpError.metadata?.order_id ?? null,
-          reason: rzpError.reason,
-          description: rzpError.description,
-        })
         setLiveStage('payment_failed')
 
         if (rzpError.metadata?.payment_id) {
@@ -326,26 +316,49 @@ export function DemoDetection() {
     }
   }
 
+  const liveBusy =
+    liveStage === 'creating_order' ||
+    liveStage === 'awaiting_checkout' ||
+    liveStage === 'detecting'
+
+  const liveEditable = liveStage === 'idle' || liveStage === 'timeout'
+
+  const trackerSteps = [
+    { key: 'order', label: 'Payment attempted', done: liveStage !== 'idle' },
+    {
+      key: 'failed',
+      label: 'Payment failed',
+      done: ['payment_failed', 'detecting', 'detected', 'timeout'].includes(
+        liveStage,
+      ),
+    },
+    {
+      key: 'detected',
+      label: 'Vidur detected',
+      done: liveStage === 'detected',
+    },
+    {
+      key: 'case',
+      label: 'Recovery case created',
+      done: liveStage === 'detected' && Boolean(detectedPayment),
+    },
+  ] as const
+
   return (
     <section className="pb-12">
       <header className="pt-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-          Development / demo only
+          Live detection demo
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-[-0.025em] text-foreground sm:text-[28px]">
-          Vidur AI — Live Detection Demo
+          See Vidur detect revenue at risk
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-5 text-muted-foreground">
-          This page only calls the real backend demo endpoints. It does not
-          calculate or display revenue-at-risk itself — open the{' '}
+          Trigger a real failed payment below, then watch it land on the{' '}
           <a href="/dashboard" className="text-primary hover:underline">
             Dashboard
-          </a>{' '}
-          or{' '}
-          <a href="/recovery-cases" className="text-primary hover:underline">
-            Recovery Cases
-          </a>{' '}
-          after each action to see the real numbers change.
+          </a>
+          .
         </p>
       </header>
 
@@ -356,58 +369,73 @@ export function DemoDetection() {
       )}
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>1. Reset demo state</CardTitle>
-            <CardDescription>
-              Deletes only records tagged VIDUR-DEMO- for your merchant. Real
-              payments, customers, and other merchants are never touched.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={resetting || !token}
-            >
-              {resetting ? 'Resetting…' : 'Reset Demo'}
-            </Button>
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground">
+            <RotateCcw size={16} />
+          </div>
 
-            {lastReset && (
-              <pre className="overflow-x-auto rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
-                {JSON.stringify(lastReset, null, 2)}
-              </pre>
-            )}
-          </CardContent>
-        </Card>
+          <h2 className="mt-4 text-base font-semibold text-foreground">
+            Reset demo state
+          </h2>
+          <p className="mt-1.5 text-sm leading-5 text-muted-foreground">
+            Clears only records tagged for this demo. Real data is never
+            touched.
+          </p>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>2. Trigger a failed payment</CardTitle>
-            <CardDescription>
-              Creates a real FAILED Payment, then calls the unmodified
-              RiskService.assessPayment() pipeline.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="demo-amount">Amount (INR)</Label>
-              <Input
-                id="demo-amount"
-                type="number"
-                min="1"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-            </div>
+          <Button
+            variant="outline"
+            className="mt-5"
+            onClick={handleReset}
+            disabled={resetting || !token}
+          >
+            {resetting ? <Loader2 size={15} className="animate-spin" /> : null}
+            {resetting ? 'Resetting…' : 'Reset demo'}
+          </Button>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="demo-reason">Failure reason</Label>
-              <Input
-                id="demo-reason"
-                value={failureReason}
-                onChange={(event) => setFailureReason(event.target.value)}
-              />
+          {lastReset && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Cleared {lastReset.paymentsDeleted} payment
+              {lastReset.paymentsDeleted === 1 ? '' : 's'} and{' '}
+              {lastReset.recoveryCasesDeleted} recovery case
+              {lastReset.recoveryCasesDeleted === 1 ? '' : 's'}.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground">
+            <Zap size={16} />
+          </div>
+
+          <h2 className="mt-4 text-base font-semibold text-foreground">
+            Trigger a failed payment
+          </h2>
+          <p className="mt-1.5 text-sm leading-5 text-muted-foreground">
+            Creates a real failed payment and runs it through Vidur's risk
+            engine.
+          </p>
+
+          <div className="mt-5 flex flex-col gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="demo-amount">Amount (INR)</Label>
+                <Input
+                  id="demo-amount"
+                  type="number"
+                  min="1"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="demo-reason">Failure reason</Label>
+                <Input
+                  id="demo-reason"
+                  value={failureReason}
+                  onChange={(event) => setFailureReason(event.target.value)}
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -419,57 +447,75 @@ export function DemoDetection() {
               />
             </div>
 
-            <Button onClick={handleTrigger} disabled={triggering || !token}>
-              {triggering ? 'Sending…' : 'Simulate Failed Payment'}
+            <Button
+              className="mt-1"
+              onClick={handleTrigger}
+              disabled={triggering || !token}
+            >
+              {triggering ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Zap size={15} />
+              )}
+              {triggering ? 'Sending…' : 'Simulate failed payment'}
             </Button>
 
             {lastTrigger && (
-              <div className="space-y-2">
-                <p className="text-sm text-foreground">
-                  Real result from RiskEngineService:{' '}
-                  <strong>
-                    {formatAmount(lastTrigger.recoveryCase.revenueAtRisk)}
-                  </strong>{' '}
-                  at risk, risk level{' '}
-                  <strong>{lastTrigger.recoveryCase.riskLevel}</strong>,
-                  recovery probability{' '}
-                  <strong>
-                    {Number(lastTrigger.recoveryCase.recoveryProbability) *
-                      100}
-                    %
-                  </strong>
-                  .
-                </p>
-                <pre className="overflow-x-auto rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
-                  {JSON.stringify(lastTrigger, null, 2)}
-                </pre>
-              </div>
+              <p className="text-sm leading-5 text-foreground">
+                <strong>
+                  {formatAmount(lastTrigger.recoveryCase.revenueAtRisk)}
+                </strong>{' '}
+                at risk · risk level{' '}
+                <strong>{formatLabel(lastTrigger.recoveryCase.riskLevel)}</strong>{' '}
+                · recovery probability{' '}
+                <strong>
+                  {Math.round(
+                    Number(lastTrigger.recoveryCase.recoveryProbability) * 100,
+                  )}
+                  %
+                </strong>
+              </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>3. Live Razorpay Test Mode payment (real webhook)</CardTitle>
-            <CardDescription>
-              Opens real Razorpay Checkout.js against a real Test Mode order.
-              A failed test payment here is detected entirely through
-              Razorpay's <code>payment.failed</code> webhook — this never
-              calls <code>/demo/payment-failure</code>. Use one of{' '}
-              <a
-                href="https://razorpay.com/docs/payments/payments/test-card-upi-details/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline"
-              >
-                Razorpay's documented Test Mode failure cards
-              </a>{' '}
-              (e.g. insufficient funds, expired card) to trigger a real
-              failure.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <section className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:col-span-2">
+          <div className="h-1 bg-gradient-to-r from-primary/80 via-primary to-primary/40" />
+
+          <div className="p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <CreditCard size={18} />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                  Real Razorpay webhook
+                </p>
+                <h2 className="mt-0.5 text-base font-semibold text-foreground">
+                  Live Test Mode payment
+                </h2>
+                <p className="mt-1.5 max-w-2xl text-sm leading-5 text-muted-foreground">
+                  Opens real Razorpay Checkout. A failed attempt is detected
+                  entirely through Razorpay's{' '}
+                  <code className="rounded bg-secondary/60 px-1 py-0.5 text-[13px]">
+                    payment.failed
+                  </code>{' '}
+                  webhook. Use a{' '}
+                  <a
+                    href="https://razorpay.com/docs/payments/payments/test-card-upi-details/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    documented test failure card
+                  </a>{' '}
+                  to trigger it.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="live-amount">Amount (INR)</Label>
                 <Input
@@ -478,7 +524,7 @@ export function DemoDetection() {
                   min="1"
                   value={liveAmount}
                   onChange={(event) => setLiveAmount(event.target.value)}
-                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                  disabled={!liveEditable}
                 />
               </div>
 
@@ -488,145 +534,110 @@ export function DemoDetection() {
                   id="live-customer"
                   value={liveCustomerName}
                   onChange={(event) => setLiveCustomerName(event.target.value)}
-                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                  disabled={!liveEditable}
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="live-customer-email">
-                  Customer email (for real recovery — payment link, notifications)
-                </Label>
+                <Label htmlFor="live-customer-email">Customer email</Label>
                 <Input
                   id="live-customer-email"
                   type="email"
                   placeholder="you@example.com"
                   value={liveCustomerEmail}
                   onChange={(event) => setLiveCustomerEmail(event.target.value)}
-                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                  disabled={!liveEditable}
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="live-customer-phone">Customer phone (for SMS delivery)</Label>
+                <Label htmlFor="live-customer-phone">Customer phone</Label>
                 <Input
                   id="live-customer-phone"
                   type="tel"
                   placeholder="+91XXXXXXXXXX"
                   value={liveCustomerPhone}
                   onChange={(event) => setLiveCustomerPhone(event.target.value)}
-                  disabled={liveStage !== 'idle' && liveStage !== 'timeout'}
+                  disabled={!liveEditable}
                 />
               </div>
             </div>
 
             <Button
+              className="mt-5"
               onClick={handleStartLivePayment}
-              disabled={
-                !token ||
-                liveStage === 'creating_order' ||
-                liveStage === 'awaiting_checkout' ||
-                liveStage === 'detecting'
-              }
+              disabled={!token || liveBusy}
             >
+              {liveBusy ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <CreditCard size={15} />
+              )}
               {liveStage === 'creating_order'
                 ? 'Creating order…'
                 : liveStage === 'awaiting_checkout'
-                  ? 'Waiting on Razorpay Checkout…'
+                  ? 'Waiting on Checkout…'
                   : 'Pay with Razorpay Test Mode'}
             </Button>
 
             {liveError && (
-              <div className="rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div className="mt-4 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {liveError}
               </div>
             )}
 
-            {/* RAZORPAY PAYMENT → PAYMENT FAILED → VIDUR DETECTED → RECOVERY CASE CREATED */}
-            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-              {(
-                [
-                  { key: 'order', label: 'Razorpay payment', done: liveStage !== 'idle' },
-                  {
-                    key: 'failed',
-                    label: 'Payment failed',
-                    done: ['payment_failed', 'detecting', 'detected', 'timeout'].includes(
-                      liveStage,
-                    ),
-                  },
-                  {
-                    key: 'detected',
-                    label: 'Vidur detected',
-                    done: liveStage === 'detected',
-                  },
-                  {
-                    key: 'case',
-                    label: 'Recovery case created',
-                    done: liveStage === 'detected' && Boolean(detectedPayment),
-                  },
-                ] as const
-              ).map((step) => (
+            <ol className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-4">
+              {trackerSteps.map((step) => (
                 <li
                   key={step.key}
-                  className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+                  className={cn(
+                    'flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium',
                     step.done
-                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-                      : 'border-border bg-secondary/40 text-muted-foreground'
-                  }`}
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : 'border-border bg-secondary/30 text-muted-foreground',
+                  )}
                 >
+                  {step.done ? (
+                    <CheckCircle2 size={13} className="shrink-0" />
+                  ) : (
+                    <Circle size={13} className="shrink-0" />
+                  )}
                   {step.label}
                 </li>
               ))}
             </ol>
 
-            <p className="text-xs text-muted-foreground">
-              Status: {LIVE_STAGE_LABEL[liveStage]}
+            <p className="mt-3 text-xs text-muted-foreground">
+              {LIVE_STAGE_LABEL[liveStage]}
             </p>
 
-            {clientFailure && (
-              <div className="rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
-                <p>
-                  Razorpay payment id:{' '}
-                  <strong className="text-foreground">{clientFailure.paymentId}</strong>
-                </p>
-                <p>
-                  Razorpay order id:{' '}
-                  <strong className="text-foreground">{clientFailure.orderId}</strong>
-                </p>
-                {clientFailure.reason && (
-                  <p>
-                    Reason:{' '}
-                    <strong className="text-foreground">{clientFailure.reason}</strong>
-                  </p>
-                )}
-              </div>
-            )}
-
             {detectedPayment && (
-              <div className="space-y-2">
-                <p className="text-sm text-foreground">
-                  Real webhook result — Recovery Case{' '}
-                  <strong>{detectedPayment.recoveryCases[0]?.id}</strong>:{' '}
+              <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
+                <p className="text-sm leading-6 text-foreground">
+                  Recovery case created —{' '}
                   <strong>
-                    {formatAmount(detectedPayment.recoveryCases[0]?.revenueAtRisk ?? '0')}
+                    {formatAmount(
+                      detectedPayment.recoveryCases[0]?.revenueAtRisk ?? '0',
+                    )}
                   </strong>{' '}
-                  at risk, risk level{' '}
-                  <strong>{formatLabel(detectedPayment.recoveryCases[0]?.riskLevel)}</strong>,
-                  root cause{' '}
-                  <strong>{formatLabel(detectedPayment.failureReason)}</strong>.
+                  at risk · risk level{' '}
+                  <strong>
+                    {formatLabel(detectedPayment.recoveryCases[0]?.riskLevel)}
+                  </strong>{' '}
+                  · root cause{' '}
+                  <strong>{formatLabel(detectedPayment.failureReason)}</strong>
                 </p>
-                <pre className="overflow-x-auto rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
-                  {JSON.stringify(detectedPayment, null, 2)}
-                </pre>
                 <a
                   href={`/recovery-cases/${detectedPayment.recoveryCases[0]?.id}`}
-                  className="text-sm text-primary hover:underline"
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                 >
-                  Open this Recovery Case →
+                  Open this recovery case
+                  <ExternalLink size={13} />
                 </a>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     </section>
   )
