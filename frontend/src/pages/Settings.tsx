@@ -1,7 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Building2, KeyRound, Loader2, LogOut, User } from 'lucide-react'
+import { Building2, KeyRound, Loader2, LogOut, Plug, User } from 'lucide-react'
 import { changePassword, updateProfile } from '../api/auth'
-import { getMyMerchant, updateMyMerchant, type MerchantProfile } from '../api/merchants'
+import {
+  connectRazorpay,
+  disconnectRazorpay,
+  getMyMerchant,
+  updateMyMerchant,
+  type MerchantProfile,
+} from '../api/merchants'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -57,6 +63,15 @@ export function Settings() {
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  const [razorpayKeyId, setRazorpayKeyId] = useState('')
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState('')
+  const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState('')
+  const [connectingRazorpay, setConnectingRazorpay] = useState(false)
+  const [razorpayMessage, setRazorpayMessage] = useState<string | null>(null)
+  const [razorpayError, setRazorpayError] = useState<string | null>(null)
+
+  const isAdmin = user?.role === 'ADMIN'
 
   useEffect(() => {
     setName(user?.name ?? '')
@@ -115,6 +130,54 @@ export function Settings() {
       )
     } finally {
       setSavingWorkspace(false)
+    }
+  }
+
+  async function handleConnectRazorpay(event: FormEvent) {
+    event.preventDefault()
+    if (!token) return
+
+    try {
+      setRazorpayError(null)
+      setRazorpayMessage(null)
+      setConnectingRazorpay(true)
+      const updated = await connectRazorpay(token, {
+        keyId: razorpayKeyId,
+        keySecret: razorpayKeySecret,
+        webhookSecret: razorpayWebhookSecret,
+      })
+      setMerchantProfile(updated)
+      setRazorpayKeyId('')
+      setRazorpayKeySecret('')
+      setRazorpayWebhookSecret('')
+      setRazorpayMessage('Razorpay account connected — Vidur verified these credentials directly with Razorpay.')
+    } catch (err) {
+      setRazorpayError(
+        err instanceof Error ? err.message : 'Unable to connect Razorpay.',
+      )
+    } finally {
+      setConnectingRazorpay(false)
+    }
+  }
+
+  async function handleDisconnectRazorpay() {
+    if (!token) return
+
+    try {
+      setRazorpayError(null)
+      setRazorpayMessage(null)
+      setConnectingRazorpay(true)
+      const updated = await disconnectRazorpay(token)
+      setMerchantProfile(updated)
+      setRazorpayMessage(
+        'Razorpay account disconnected — you are back on the shared sandbox account.',
+      )
+    } catch (err) {
+      setRazorpayError(
+        err instanceof Error ? err.message : 'Unable to disconnect Razorpay.',
+      )
+    } finally {
+      setConnectingRazorpay(false)
     }
   }
 
@@ -254,6 +317,127 @@ export function Settings() {
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
                   'Save workspace'
+                )}
+              </Button>
+            </form>
+          )}
+        </SettingsCard>
+
+        <SettingsCard
+          icon={Plug}
+          title="Connect Razorpay"
+          description="Transact through your own Razorpay account instead of Vidur's shared Test Mode sandbox."
+        >
+          {loadingMerchant ? (
+            <Skeleton className="h-40 rounded-lg" />
+          ) : merchantProfile?.razorpayConnected ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400">
+                Connected — Key ID ending in …
+                {merchantProfile.razorpayKeyId?.slice(-4)}
+              </div>
+              {razorpayError && (
+                <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {razorpayError}
+                </div>
+              )}
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={connectingRazorpay}
+                  onClick={handleDisconnectRazorpay}
+                >
+                  {connectingRazorpay ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    'Disconnect and use the shared sandbox again'
+                  )}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Only an admin can change this.
+                </p>
+              )}
+            </div>
+          ) : !isAdmin ? (
+            <p className="text-sm text-muted-foreground">
+              This workspace is using Vidur's shared Test Mode sandbox
+              account. Only an admin can connect a different Razorpay
+              account.
+            </p>
+          ) : (
+            <form className="space-y-4" onSubmit={handleConnectRazorpay}>
+              <p className="text-xs text-muted-foreground">
+                Not connected — this workspace currently transacts through
+                Vidur's shared Test Mode sandbox account. Enter your own
+                Razorpay Dashboard credentials below; Vidur verifies them
+                with Razorpay before saving anything, and the secret values
+                are never shown again once saved.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="razorpayKeyId">Key ID</Label>
+                <Input
+                  id="razorpayKeyId"
+                  placeholder="rzp_test_..."
+                  value={razorpayKeyId}
+                  onChange={(event) => setRazorpayKeyId(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="razorpayKeySecret">Key Secret</Label>
+                <Input
+                  id="razorpayKeySecret"
+                  type="password"
+                  value={razorpayKeySecret}
+                  onChange={(event) => setRazorpayKeySecret(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="razorpayWebhookSecret">Webhook secret</Label>
+                <Input
+                  id="razorpayWebhookSecret"
+                  type="password"
+                  value={razorpayWebhookSecret}
+                  onChange={(event) =>
+                    setRazorpayWebhookSecret(event.target.value)
+                  }
+                  required
+                />
+                {merchant && (
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    Point your Razorpay Dashboard's webhook URL (Settings →
+                    Webhooks) at:{' '}
+                    <code className="rounded bg-muted px-1 py-0.5">
+                      {import.meta.env.VITE_API_BASE_URL}/razorpay/webhook/merchant/
+                      {merchant.id}
+                    </code>{' '}
+                    — this is what the webhook secret above must match.
+                  </p>
+                )}
+              </div>
+
+              {razorpayError && (
+                <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {razorpayError}
+                </div>
+              )}
+              {razorpayMessage && (
+                <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400">
+                  {razorpayMessage}
+                </div>
+              )}
+
+              <Button type="submit" disabled={connectingRazorpay}>
+                {connectingRazorpay ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  'Verify and connect'
                 )}
               </Button>
             </form>

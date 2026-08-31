@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RiskService } from '../risk/risk.service';
@@ -10,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { RazorpayService } from './razorpay.service';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import { EscalationService } from '../escalation/escalation.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 
 function signedBody(payload: unknown) {
   return Buffer.from(JSON.stringify(payload));
@@ -87,6 +89,14 @@ describe('RazorpayWebhookService', () => {
     escalateRecoveryCase: jest.fn(),
   } as unknown as EscalationService;
 
+  const autoOrchestrator = {
+    runAutomaticRecovery: jest.fn().mockResolvedValue(undefined),
+  } as unknown as RecoveryAutoOrchestratorService;
+
+  const moduleRef = {
+    get: jest.fn().mockReturnValue(autoOrchestrator),
+  } as unknown as ModuleRef;
+
   const validPayload = {
     event: 'payment.failed',
     payload: {
@@ -108,6 +118,7 @@ describe('RazorpayWebhookService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (moduleRef.get as jest.Mock).mockReturnValue(autoOrchestrator);
     service = new RazorpayWebhookService(
       prisma,
       razorpayService,
@@ -115,7 +126,9 @@ describe('RazorpayWebhookService', () => {
       riskService,
       auditService,
       escalationService,
+      moduleRef,
     );
+    service.onModuleInit();
   });
 
   it('rejects when the raw body is missing (cannot verify signature)', async () => {

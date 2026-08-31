@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CredentialEncryptionService } from '../credential-encryption/credential-encryption.service';
 
 export interface RazorpayOrder {
   id: string;
@@ -52,31 +53,91 @@ export interface RecurringChargeResult {
 
 @Injectable()
 export class RazorpayService {
-  private readonly keyId = process.env.RAZORPAY_KEY_ID;
+  /**
+   * Vidur's own shared Test Mode account — what FashionKart and every
+   * merchant that hasn't connected their own Razorpay account transacts
+   * through. Never exposed to the frontend; used only as the fallback in
+   * resolveCredentials()/resolveWebhookSecret() below.
+   */
+  private readonly globalKeyId = process.env.RAZORPAY_KEY_ID;
 
-  private readonly keySecret = process.env.RAZORPAY_KEY_SECRET;
+  private readonly globalKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
-  private readonly webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  private readonly globalWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly credentialEncryption: CredentialEncryptionService,
+  ) {}
 
-  private basicAuthHeader(): string {
-    if (!this.keyId || !this.keySecret) {
+  /**
+   * A merchant who has connected their own Razorpay account (Settings ->
+   * Connect Razorpay) transacts through it; everyone else falls back to
+   * Vidur's shared sandbox account. This is the single place that decision
+   * is made — every API-calling method below goes through this (directly or
+   * via basicAuthHeader), so there is exactly one merchant/account
+   * resolution rule in the whole service.
+   */
+  private async resolveCredentials(
+    merchantId?: string,
+  ): Promise<{ keyId: string; keySecret: string }> {
+    if (merchantId) {
+      const merchant = await this.prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { razorpayKeyId: true, razorpayKeySecretEncrypted: true },
+      });
+
+      if (merchant?.razorpayKeyId && merchant.razorpayKeySecretEncrypted) {
+        return {
+          keyId: merchant.razorpayKeyId,
+          keySecret: this.credentialEncryption.decrypt(
+            merchant.razorpayKeySecretEncrypted,
+          ),
+        };
+      }
+    }
+
+    if (!this.globalKeyId || !this.globalKeySecret) {
       throw new InternalServerErrorException(
         'Razorpay credentials are not configured.',
       );
     }
 
-    return Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64');
+    return { keyId: this.globalKeyId, keySecret: this.globalKeySecret };
   }
 
-  async getOrder(orderId: string): Promise<RazorpayOrder> {
+  /**
+   * Validates a candidate Key ID/Secret pair by making a real, minimal,
+   * read-only Razorpay API call — used by MerchantsService before a merchant's
+   * "Connect Razorpay" submission is ever saved, so a typo'd or revoked key
+   * is caught immediately instead of silently breaking every future webhook.
+   */
+  async verifyCredentials(keyId: string, keySecret: string): Promise<boolean> {
+    const response = await fetch(
+      'https://api.razorpay.com/v1/payments?count=1',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+        },
+      },
+    );
+
+    return response.ok;
+  }
+
+  private async basicAuthHeader(merchantId?: string): Promise<string> {
+    const { keyId, keySecret } = await this.resolveCredentials(merchantId);
+    return Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+  }
+
+  async getOrder(orderId: string, merchantId?: string): Promise<RazorpayOrder> {
     const response = await fetch(
       `https://api.razorpay.com/v1/orders/${orderId}`,
       {
         method: 'GET',
         headers: {
-          Authorization: `Basic ${this.basicAuthHeader()}`,
+          Authorization: `Basic ${await this.basicAuthHeader(merchantId)}`,
         },
       },
     );
@@ -112,7 +173,7 @@ export class RazorpayService {
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${this.basicAuthHeader()}`,
+        Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -153,12 +214,7 @@ export class RazorpayService {
     amount: number;
     customerName?: string;
   }): Promise<CreateCheckoutOrderResult> {
-    if (!this.keyId) {
-      throw new InternalServerErrorException(
-        'Razorpay credentials are not configured.',
-      );
-    }
-
+    const { keyId } = await this.resolveCredentials(params.merchantId);
     const order = await this.createOrder(params);
 
     await this.prisma.order.create({
@@ -175,7 +231,7 @@ export class RazorpayService {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: this.keyId,
+      keyId,
     };
   }
 
@@ -210,7 +266,7 @@ export class RazorpayService {
     const response = await fetch('https://api.razorpay.com/v1/payment_links/', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${this.basicAuthHeader()}`,
+        Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -269,7 +325,7 @@ export class RazorpayService {
     const planResponse = await fetch('https://api.razorpay.com/v1/plans', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${this.basicAuthHeader()}`,
+        Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -298,7 +354,7 @@ export class RazorpayService {
       {
         method: 'POST',
         headers: {
-          Authorization: `Basic ${this.basicAuthHeader()}`,
+          Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -370,13 +426,16 @@ export class RazorpayService {
    * this idempotent (returns the existing Razorpay customer instead of
    * erroring if one already exists for this contact/email).
    */
-  private async getOrCreateRazorpayCustomer(customer: {
-    id: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-    razorpayCustomerId: string | null;
-  }): Promise<string> {
+  private async getOrCreateRazorpayCustomer(
+    customer: {
+      id: string;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      razorpayCustomerId: string | null;
+    },
+    merchantId: string,
+  ): Promise<string> {
     if (customer.razorpayCustomerId) {
       return customer.razorpayCustomerId;
     }
@@ -384,7 +443,7 @@ export class RazorpayService {
     const response = await fetch('https://api.razorpay.com/v1/customers', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${this.basicAuthHeader()}`,
+        Authorization: `Basic ${await this.basicAuthHeader(merchantId)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -438,20 +497,17 @@ export class RazorpayService {
     frequency?: string;
     expireAt: Date;
   }): Promise<CreateMandateRegistrationResult> {
-    if (!this.keyId) {
-      throw new InternalServerErrorException(
-        'Razorpay credentials are not configured.',
-      );
-    }
+    const { keyId } = await this.resolveCredentials(params.merchantId);
 
     const razorpayCustomerId = await this.getOrCreateRazorpayCustomer(
       params.customer,
+      params.merchantId,
     );
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${this.basicAuthHeader()}`,
+        Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -501,7 +557,7 @@ export class RazorpayService {
       registrationOrderId: order.id,
       amount: params.maxAmount,
       currency: params.currency ?? 'INR',
-      keyId: this.keyId,
+      keyId,
       method: params.method,
     };
   }
@@ -550,6 +606,7 @@ export class RazorpayService {
   }): Promise<RecurringChargeResult> {
     const razorpayCustomerId = await this.getOrCreateRazorpayCustomer(
       params.customer,
+      params.merchantId,
     );
 
     const order = await this.createOrder({
@@ -578,7 +635,7 @@ export class RazorpayService {
       {
         method: 'POST',
         headers: {
-          Authorization: `Basic ${this.basicAuthHeader()}`,
+          Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -619,19 +676,61 @@ export class RazorpayService {
    * Verifies X-Razorpay-Signature against the raw (unparsed) request body,
    * per Razorpay's documented webhook verification: HMAC-SHA256 of the raw
    * body using the dashboard-configured webhook secret, compared to the
-   * header. Constant-time compare to avoid timing attacks.
+   * header. Constant-time compare to avoid timing attacks. Uses Vidur's
+   * shared-account webhook secret — the existing global /razorpay/webhook
+   * route, unchanged.
    */
   verifyWebhookSignature(
     rawBody: Buffer,
     signature: string | undefined,
   ): boolean {
-    if (!this.webhookSecret || !signature) {
+    return this.compareSignature(rawBody, signature, this.globalWebhookSecret);
+  }
+
+  /**
+   * Same verification, but against one specific merchant's own configured
+   * webhook secret (falling back to the shared/global secret if they haven't
+   * set one) — used by the merchant-specific /razorpay/webhook/merchant/:id
+   * route. A signature computed with a different merchant's secret (or the
+   * wrong one entirely) always fails here, which is the actual isolation
+   * guarantee between merchants' webhook traffic.
+   */
+  async verifyWebhookSignatureForMerchant(
+    rawBody: Buffer,
+    signature: string | undefined,
+    merchantId: string,
+  ): Promise<boolean> {
+    const secret = await this.resolveWebhookSecret(merchantId);
+    return this.compareSignature(rawBody, signature, secret);
+  }
+
+  private async resolveWebhookSecret(
+    merchantId: string,
+  ): Promise<string | undefined> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { razorpayWebhookSecretEncrypted: true },
+    });
+
+    if (merchant?.razorpayWebhookSecretEncrypted) {
+      return this.credentialEncryption.decrypt(
+        merchant.razorpayWebhookSecretEncrypted,
+      );
+    }
+
+    return this.globalWebhookSecret;
+  }
+
+  private compareSignature(
+    rawBody: Buffer,
+    signature: string | undefined,
+    secret: string | undefined,
+  ): boolean {
+    if (!secret || !signature) {
       return false;
     }
 
-    const expected = createHmac('sha256', this.webhookSecret)
-      .update(rawBody)
-      .digest('hex');
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
 
     const expectedBuffer = Buffer.from(expected, 'utf8');
     const signatureBuffer = Buffer.from(signature, 'utf8');

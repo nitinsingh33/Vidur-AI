@@ -3,9 +3,12 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import {
   PaymentMethod,
   PaymentStatus,
@@ -120,8 +123,17 @@ const METHOD_MAP: Record<string, PaymentMethod> = {
  * Everything else is acknowledged (2xx) but not processed.
  */
 @Injectable()
-export class RazorpayWebhookService {
+export class RazorpayWebhookService implements OnModuleInit {
   private readonly logger = new Logger(RazorpayWebhookService.name);
+
+  /**
+   * Resolved lazily via ModuleRef (not constructor DI) to avoid a module
+   * cycle: RecoveryAutoModule imports RecoveryModule, which already imports
+   * RazorpayModule — a constructor-injected edge back from RazorpayModule to
+   * RecoveryAutoModule would close that loop. See RecoveryAutoModule's
+   * doc comment.
+   */
+  private autoOrchestrator!: RecoveryAutoOrchestratorService;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -130,15 +142,32 @@ export class RazorpayWebhookService {
     private readonly riskService: RiskService,
     private readonly auditService: AuditService,
     private readonly escalationService: EscalationService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  onModuleInit() {
+    this.autoOrchestrator = this.moduleRef.get(
+      RecoveryAutoOrchestratorService,
+      { strict: false },
+    );
+  }
 
   async handleWebhook(
     rawBody: Buffer | undefined,
     signature: string | undefined,
     eventId: string | undefined,
+    /**
+     * Set only by the merchant-specific route
+     * (/razorpay/webhook/merchant/:merchantId) — when present, the merchant
+     * is already known from the URL, so signature verification uses *that*
+     * merchant's own webhook secret and the payment.failed handler skips
+     * the shared-account notes-based resolution entirely.
+     */
+    knownMerchantId?: string,
   ) {
     this.logger.log(
-      `Razorpay webhook received (eventId=${eventId ?? 'unknown'}).`,
+      `Razorpay webhook received (eventId=${eventId ?? 'unknown'}, ` +
+        `merchant=${knownMerchantId ?? 'shared-account'}).`,
     );
 
     if (!rawBody) {
@@ -147,9 +176,18 @@ export class RazorpayWebhookService {
       );
     }
 
-    if (!this.razorpayService.verifyWebhookSignature(rawBody, signature)) {
+    const signatureValid = knownMerchantId
+      ? await this.razorpayService.verifyWebhookSignatureForMerchant(
+          rawBody,
+          signature,
+          knownMerchantId,
+        )
+      : this.razorpayService.verifyWebhookSignature(rawBody, signature);
+
+    if (!signatureValid) {
       this.logger.warn(
-        `Rejected Razorpay webhook with invalid signature (eventId=${eventId ?? 'unknown'}).`,
+        `Rejected Razorpay webhook with invalid signature (eventId=${eventId ?? 'unknown'}, ` +
+          `merchant=${knownMerchantId ?? 'shared-account'}).`,
       );
       throw new UnauthorizedException('Invalid Razorpay webhook signature.');
     }
@@ -172,7 +210,7 @@ export class RazorpayWebhookService {
     }
 
     if (event === 'payment.captured') {
-      return this.handlePaymentCaptured(payload, eventId);
+      return this.handlePaymentCaptured(payload, eventId, knownMerchantId);
     }
 
     if (event === 'order.paid') {
@@ -236,7 +274,10 @@ export class RazorpayWebhookService {
     const razorpayPaymentId = entity.id;
     const razorpayOrderId = entity.order_id ?? null;
 
-    const merchantContext = await this.resolveMerchantContext(entity);
+    const merchantContext = await this.resolveMerchantContext(
+      entity,
+      knownMerchantId,
+    );
 
     if (!merchantContext) {
       this.logger.warn(
@@ -424,6 +465,15 @@ export class RazorpayWebhookService {
       recoveryCase = await this.riskService.assessPayment(payment.id);
     }
 
+    /*
+     * The hero automatic loop: a real payment.failed webhook, already
+     * signature-verified above, opens/updates a real case — no merchant
+     * click required for what happens next. Fire-and-forget so the webhook
+     * response (and Razorpay's delivery timeout) isn't held up by the full
+     * strategy/policy/execute/observe chain.
+     */
+    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
+
     this.logger.log(
       `Recovery case ${recoveryCase.id} created for payment ${payment.id} ` +
         `(riskLevel=${recoveryCase.riskLevel}, eventId=${eventId ?? 'unknown'}).`,
@@ -520,6 +570,7 @@ export class RazorpayWebhookService {
   private async handlePaymentCaptured(
     payload: RazorpayWebhookPayload,
     eventId: string | undefined,
+    knownMerchantId?: string,
   ) {
     const entity = payload.payload?.payment?.entity;
 
@@ -531,7 +582,10 @@ export class RazorpayWebhookService {
       };
     }
 
-    const merchantContext = await this.resolveMerchantContext(entity);
+    const merchantContext = await this.resolveMerchantContext(
+      entity,
+      knownMerchantId,
+    );
 
     if (!merchantContext) {
       return {
@@ -896,6 +950,8 @@ export class RazorpayWebhookService {
     const recoveryCase = await this.riskService.assessSubscriptionFailure(
       subscription.id,
     );
+
+    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
 
     this.logger.log(
       `subscription.pending for ${entity.id} -> case ${recoveryCase.id} ` +
@@ -1480,13 +1536,27 @@ export class RazorpayWebhookService {
    * is how a webhook — which carries no merchant JWT — knows which merchant
    * this payment belongs to. Falls back to a live order lookup via the
    * existing RazorpayService.getOrder() when the payment entity itself
-   * didn't carry notes.
+   * didn't carry notes. When `knownMerchantId` is set (the merchant-specific
+   * webhook route), the merchant is already known from the URL — skip both
+   * of those and use it directly, still reading notes for customer
+   * metadata only.
    */
-  private async resolveMerchantContext(entity: RazorpayPaymentEntity): Promise<{
+  private async resolveMerchantContext(
+    entity: RazorpayPaymentEntity,
+    knownMerchantId?: string,
+  ): Promise<{
     merchantId: string;
     customerName?: string;
     customerId?: string;
   } | null> {
+    if (knownMerchantId) {
+      return {
+        merchantId: knownMerchantId,
+        customerName: entity.notes?.customerName,
+        customerId: entity.notes?.customerId,
+      };
+    }
+
     if (entity.notes?.merchantId) {
       return {
         merchantId: entity.notes.merchantId,

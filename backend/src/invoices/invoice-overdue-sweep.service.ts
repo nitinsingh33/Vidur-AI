@@ -1,8 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 
 const DEFAULT_INTERVAL_MINUTES = 60;
 const MAX_INVOICES_PER_SWEEP = 200;
@@ -18,10 +20,14 @@ const MAX_INVOICES_PER_SWEEP = 200;
 export class InvoiceOverdueSweepService implements OnModuleInit {
   private readonly logger = new Logger(InvoiceOverdueSweepService.name);
 
+  /** Resolved lazily via ModuleRef — see RecoveryAutoModule's doc comment. */
+  private autoOrchestrator!: RecoveryAutoOrchestratorService;
+
   constructor(
     @InjectQueue('invoice-overdue-sweep') private readonly sweepQueue: Queue,
     private readonly prisma: PrismaService,
     private readonly riskService: RiskService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   private get intervalMinutes() {
@@ -34,6 +40,11 @@ export class InvoiceOverdueSweepService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    this.autoOrchestrator = this.moduleRef.get(
+      RecoveryAutoOrchestratorService,
+      { strict: false },
+    );
+
     await this.sweepQueue.upsertJobScheduler(
       'invoice-overdue-sweep',
       { every: this.intervalMinutes * 60 * 1000 },
@@ -76,6 +87,7 @@ export class InvoiceOverdueSweepService implements OnModuleInit {
         invoice.id,
       );
       caseIds.push(recoveryCase.id);
+      void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
     }
 
     if (staleInvoices.length > 0) {

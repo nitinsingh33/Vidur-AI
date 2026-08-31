@@ -1,6 +1,8 @@
+import { ModuleRef } from '@nestjs/core';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import { CheckoutSweepService } from './checkout-sweep.service';
 
 describe('CheckoutSweepService', () => {
@@ -20,9 +22,19 @@ describe('CheckoutSweepService', () => {
     assessOrderAbandonment: jest.fn(),
   } as unknown as RiskService;
 
-  beforeEach(() => {
+  const autoOrchestrator = {
+    runAutomaticRecovery: jest.fn().mockResolvedValue(undefined),
+  } as unknown as RecoveryAutoOrchestratorService;
+
+  const moduleRef = {
+    get: jest.fn().mockReturnValue(autoOrchestrator),
+  } as unknown as ModuleRef;
+
+  beforeEach(async () => {
     jest.clearAllMocks();
-    service = new CheckoutSweepService(queue, prisma, riskService);
+    (moduleRef.get as jest.Mock).mockReturnValue(autoOrchestrator);
+    service = new CheckoutSweepService(queue, prisma, riskService, moduleRef);
+    await service.onModuleInit();
   });
 
   it('only flags orders older than the grace period, not brand-new ones', async () => {

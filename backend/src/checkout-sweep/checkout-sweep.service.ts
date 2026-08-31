@@ -1,8 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import { ACTIVE_RECOVERY_CASE_STATUSES } from '../recovery/recovery-case-status.util';
 import {
   getCheckoutAbandonmentCutoff,
@@ -29,10 +31,14 @@ const MAX_ORDERS_PER_SWEEP = 200;
 export class CheckoutSweepService implements OnModuleInit {
   private readonly logger = new Logger(CheckoutSweepService.name);
 
+  /** Resolved lazily via ModuleRef — see RecoveryAutoModule's doc comment. */
+  private autoOrchestrator!: RecoveryAutoOrchestratorService;
+
   constructor(
     @InjectQueue('checkout-sweep') private readonly sweepQueue: Queue,
     private readonly prisma: PrismaService,
     private readonly riskService: RiskService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   private get intervalMinutes() {
@@ -43,6 +49,11 @@ export class CheckoutSweepService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    this.autoOrchestrator = this.moduleRef.get(
+      RecoveryAutoOrchestratorService,
+      { strict: false },
+    );
+
     // upsertJobScheduler is keyed by jobSchedulerId, so calling this again
     // on every boot with the same id is idempotent — it updates the
     // existing scheduler rather than creating a duplicate.
@@ -87,6 +98,7 @@ export class CheckoutSweepService implements OnModuleInit {
         order.id,
       );
       caseIds.push(recoveryCase.id);
+      void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
     }
 
     if (staleOrders.length > 0) {

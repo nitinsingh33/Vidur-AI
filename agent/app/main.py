@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.graph.workflow import build_recovery_graph
+from app.llm.diagnosis import generate_diagnosis
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +49,29 @@ class RecoveryPredictionResponse(BaseModel):
 
 class RecoveryWorkflowRequest(BaseModel):
     recovery_case_id: str
+
+
+class DiagnosisRequest(BaseModel):
+    """
+    Context for a single case, already assembled by the caller (either the
+    LangGraph workflow's diagnose_case node, or the NestJS
+    RecoveryAutoOrchestratorService calling this endpoint directly for the
+    automatic path). This endpoint only narrates — it never decides the
+    action, never touches policy, and never executes anything; the caller
+    already made those decisions before calling this.
+    """
+
+    root_cause: str | None = None
+    payment_amount: float | None = None
+    payment_method: str | None = None
+    failure_reason: str | None = None
+    retry_count: int | None = None
+    recovery_probability: float | None = None
+    candidate_intervention: str | None = None
+
+
+class DiagnosisResponse(BaseModel):
+    reasoning: str | None
 
 
 class RecoveryWorkflowResponse(BaseModel):
@@ -94,6 +118,25 @@ def predict_recovery(
             4,
         )
     )
+
+@app.post(
+    "/diagnose",
+    response_model=DiagnosisResponse,
+)
+def diagnose(request: DiagnosisRequest):
+    """
+    Narrow, narration-only endpoint: given case context already assembled
+    and decided-upon by the caller, produces a natural-language explanation
+    via Gemini (best-effort — see generate_diagnosis's own graceful-failure
+    behavior). Does not run the rest of the recovery graph, so calling this
+    from the automatic in-process orchestrator can never race with — or
+    duplicate — that orchestrator's own execute/observe/escalate calls.
+    """
+
+    reasoning = generate_diagnosis(request.model_dump())
+
+    return DiagnosisResponse(reasoning=reasoning)
+
 
 @app.post(
     "/run-recovery",

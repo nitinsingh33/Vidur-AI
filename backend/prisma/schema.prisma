@@ -129,6 +129,22 @@ model Merchant {
   name      String
   email     String   @unique
   currency  String   @default("INR")
+  /// Public storefront identifier (e.g. "fashionkart"). Null for merchants
+  /// that don't have a customer-facing storefront configured.
+  slug      String?  @unique
+  /// Razorpay Key ID — not secret (used client-side by Checkout.js already),
+  /// stored in plaintext. Null means this merchant has not connected their
+  /// own Razorpay account and transacts through Vidur's shared sandbox
+  /// account (RAZORPAY_KEY_ID/SECRET env vars) — see RazorpayService.
+  razorpayKeyId String?
+  /// AES-256-GCM encrypted Razorpay Key Secret. Never returned by any API
+  /// response — decrypted only inside RazorpayService/CredentialEncryptionService
+  /// at the moment of calling the Razorpay API.
+  razorpayKeySecretEncrypted String?
+  /// AES-256-GCM encrypted webhook secret for this merchant's own
+  /// /razorpay/webhook/merchant/:merchantId route. Never returned by any API
+  /// response.
+  razorpayWebhookSecretEncrypted String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

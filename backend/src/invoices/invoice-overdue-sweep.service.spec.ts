@@ -1,6 +1,8 @@
+import { ModuleRef } from '@nestjs/core';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
+import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import { InvoiceOverdueSweepService } from './invoice-overdue-sweep.service';
 
 describe('InvoiceOverdueSweepService', () => {
@@ -21,9 +23,24 @@ describe('InvoiceOverdueSweepService', () => {
     assessInvoiceOverdue: jest.fn(),
   } as unknown as RiskService;
 
-  beforeEach(() => {
+  const autoOrchestrator = {
+    runAutomaticRecovery: jest.fn().mockResolvedValue(undefined),
+  } as unknown as RecoveryAutoOrchestratorService;
+
+  const moduleRef = {
+    get: jest.fn().mockReturnValue(autoOrchestrator),
+  } as unknown as ModuleRef;
+
+  beforeEach(async () => {
     jest.clearAllMocks();
-    service = new InvoiceOverdueSweepService(queue, prisma, riskService);
+    (moduleRef.get as jest.Mock).mockReturnValue(autoOrchestrator);
+    service = new InvoiceOverdueSweepService(
+      queue,
+      prisma,
+      riskService,
+      moduleRef,
+    );
+    await service.onModuleInit();
   });
 
   it('flips stale ISSUED invoices to OVERDUE and opens a case for each', async () => {
