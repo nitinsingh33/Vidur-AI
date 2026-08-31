@@ -16,4 +16,16 @@ export class LaunchScenarioDto {
   @IsString()
   @MaxLength(80)
   customerName?: string;
+
+  /**
+   * Promise-to-Pay scenario only: how many minutes from now the promised
+   * date should be — a fast local demo path so a judge doesn't have to wait
+   * days for the real verification sweep to become relevant. Positive means
+   * the promise isn't due yet; zero or negative lets it be resolved
+   * immediately by "Run sweep now". The verification logic itself
+   * (PromiseToPaySweepService) is completely unmodified either way.
+   */
+  @IsOptional()
+  @IsNumber()
+  promisedInMinutes?: number;
 }

@@ -4,6 +4,7 @@ import { PolicyAction, RecoveryActionType } from '../generated/prisma/enums';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { DEFAULT_POLICIES } from './default-policies';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 
 export interface PolicyCheckResult {
@@ -24,6 +25,56 @@ export class PolicyService {
       where: { merchantId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Backfills any DEFAULT_POLICIES entry this merchant doesn't already have a
+   * Policy row for — e.g. a merchant signed up before SEND_VOICE_MESSAGE
+   * existed. Additive only: never touches, overwrites, or re-enables an
+   * existing row for an actionType the merchant already has (including one
+   * they've since disabled or edited), so it's always safe to call again.
+   */
+  async syncDefaultPolicies(merchantId: string, actor: { id: string }) {
+    const existing = await this.prisma.policy.findMany({
+      where: { merchantId },
+      select: { actionType: true },
+    });
+    const existingTypes = new Set(existing.map((policy) => policy.actionType));
+
+    const missing = DEFAULT_POLICIES.filter(
+      (policy) => !existingTypes.has(policy.actionType),
+    );
+
+    if (missing.length === 0) {
+      return { created: [] as string[] };
+    }
+
+    await this.prisma.policy.createMany({
+      data: missing.map((policy) => ({
+        merchantId,
+        name: policy.name,
+        description: policy.description,
+        actionType: policy.actionType,
+        decision: policy.decision,
+        maxRetries: policy.maxRetries ?? null,
+        maxContacts: policy.maxContacts ?? null,
+        maxAmount: policy.maxAmount ?? null,
+        retryIntervalMinutes: policy.retryIntervalMinutes ?? null,
+        enabled: true,
+      })),
+    });
+
+    const createdTypes = missing.map((policy) => policy.actionType);
+
+    await this.auditService.record({
+      merchantId,
+      action: 'POLICY_DEFAULTS_SYNCED',
+      actorType: 'HUMAN',
+      actorId: actor.id,
+      details: { createdActionTypes: createdTypes },
+    });
+
+    return { created: createdTypes };
   }
 
   async update(

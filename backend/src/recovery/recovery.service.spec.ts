@@ -27,6 +27,9 @@ describe('RecoveryService', () => {
     mandate: {
       update: jest.fn(),
     },
+    recoveryOutcome: {
+      create: jest.fn(),
+    },
   } as unknown as PrismaService;
 
   const auditService = {
@@ -132,6 +135,92 @@ describe('RecoveryService', () => {
     expect(result).toEqual(existingAction);
 
     expect(prisma.recoveryAction.create).not.toHaveBeenCalled();
+  });
+
+  describe('voice-message channel escalation', () => {
+    it('stays on the natural channel for the first attempt', async () => {
+      prisma.recoveryCase.findUnique = jest.fn().mockResolvedValue({
+        id: 'recovery-case-id',
+        rootCause: 'INSUFFICIENT_FUNDS',
+        actions: [],
+      });
+      prisma.recoveryAction.findFirst = jest.fn().mockResolvedValue(null);
+      prisma.recoveryAction.create = jest.fn().mockResolvedValue({
+        id: 'action-id',
+        type: RecoveryActionType.RETRY_PAYMENT,
+        status: 'PENDING',
+      });
+
+      const result = await service.createStrategyForCase('recovery-case-id');
+
+      expect(result.type).toBe(RecoveryActionType.RETRY_PAYMENT);
+    });
+
+    it('escalates to SEND_VOICE_MESSAGE after 2 prior attempts on the natural channel', async () => {
+      prisma.recoveryCase.findUnique = jest.fn().mockResolvedValue({
+        id: 'recovery-case-id',
+        rootCause: 'INSUFFICIENT_FUNDS',
+        actions: [
+          { type: RecoveryActionType.RETRY_PAYMENT, status: 'SUCCESS' },
+          { type: RecoveryActionType.RETRY_PAYMENT, status: 'FAILED' },
+        ],
+      });
+      prisma.recoveryAction.findFirst = jest.fn().mockResolvedValue(null);
+      prisma.recoveryAction.create = jest.fn().mockResolvedValue({
+        id: 'action-id',
+        type: RecoveryActionType.SEND_VOICE_MESSAGE,
+        status: 'PENDING',
+      });
+
+      const result = await service.createStrategyForCase('recovery-case-id');
+
+      expect(result.type).toBe(RecoveryActionType.SEND_VOICE_MESSAGE);
+      expect(prisma.recoveryAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: RecoveryActionType.SEND_VOICE_MESSAGE,
+          }),
+        }),
+      );
+    });
+
+    it('never escalates a mandate root cause to voice — it stays ESCALATE_HUMAN regardless of attempt count', async () => {
+      prisma.recoveryCase.findUnique = jest.fn().mockResolvedValue({
+        id: 'recovery-case-id',
+        rootCause: 'mandate_paused',
+        actions: [
+          { type: RecoveryActionType.ESCALATE_HUMAN, status: 'FAILED' },
+          { type: RecoveryActionType.ESCALATE_HUMAN, status: 'FAILED' },
+        ],
+      });
+      prisma.recoveryAction.findFirst = jest.fn().mockResolvedValue(null);
+      prisma.recoveryAction.create = jest.fn().mockResolvedValue({
+        id: 'action-id',
+        type: RecoveryActionType.ESCALATE_HUMAN,
+        status: 'PENDING',
+      });
+
+      const result = await service.createStrategyForCase('recovery-case-id');
+
+      expect(result.type).toBe(RecoveryActionType.ESCALATE_HUMAN);
+    });
+
+    it('does not crash when actions is not included in the query result (defensive default)', async () => {
+      prisma.recoveryCase.findUnique = jest.fn().mockResolvedValue({
+        id: 'recovery-case-id',
+        rootCause: 'INSUFFICIENT_FUNDS',
+      });
+      prisma.recoveryAction.findFirst = jest.fn().mockResolvedValue(null);
+      prisma.recoveryAction.create = jest.fn().mockResolvedValue({
+        id: 'action-id',
+        type: RecoveryActionType.RETRY_PAYMENT,
+        status: 'PENDING',
+      });
+
+      const result = await service.createStrategyForCase('recovery-case-id');
+
+      expect(result.type).toBe(RecoveryActionType.RETRY_PAYMENT);
+    });
   });
 
   describe('approveAction / rejectAction', () => {
@@ -371,6 +460,171 @@ describe('RecoveryService', () => {
 
       expect(razorpayService.createRecurringCharge).not.toHaveBeenCalled();
       expect(result.status).toBe('FAILED');
+    });
+
+    describe('SEND_VOICE_MESSAGE', () => {
+      let fetchMock: jest.Mock;
+      const originalFetch = global.fetch;
+
+      beforeEach(() => {
+        (prisma.recoveryAction.updateMany as jest.Mock).mockResolvedValue({
+          count: 1,
+        });
+        (prisma.recoveryAction.update as jest.Mock).mockImplementation(
+          (args: { data: Record<string, unknown> }) => ({
+            id: 'action-1',
+            ...args.data,
+          }),
+        );
+        fetchMock = jest.fn();
+        global.fetch = fetchMock as unknown as typeof fetch;
+      });
+
+      afterAll(() => {
+        global.fetch = originalFetch;
+      });
+
+      it('fails cleanly (no throw) when the customer has no phone on file, without ever calling the agent', async () => {
+        (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+          baseCase({
+            customer: { id: 'customer-1', name: 'Test', email: 't@example.com', phone: null, razorpayCustomerId: null },
+            actions: [
+              { id: 'action-1', type: 'SEND_VOICE_MESSAGE', status: 'PENDING', policyDecision: 'ALLOW' },
+            ],
+          }),
+        );
+
+        const result = await service.executeRecoveryAction('case-1');
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(result.status).toBe('FAILED');
+      });
+
+      it('stores the real script and base64 audio on success, and never touches Payment/Order/Invoice status', async () => {
+        (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+          baseCase({
+            customer: { id: 'customer-1', name: 'Test', email: 't@example.com', phone: '9999999999', razorpayCustomerId: null },
+            actions: [
+              { id: 'action-1', type: 'SEND_VOICE_MESSAGE', status: 'PENDING', policyDecision: 'ALLOW' },
+            ],
+          }),
+        );
+        fetchMock.mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            script: 'Namaste! Aapka payment complete nahi hua.',
+            audio_base64: 'ZmFrZS1hdWRpby1ieXRlcw==',
+            mime_type: 'audio/wav',
+          }),
+        });
+
+        const result = await service.executeRecoveryAction('case-1');
+
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining('/generate-voice-message'),
+          expect.objectContaining({ method: 'POST' }),
+        );
+        expect(result.status).toBe('SUCCESS');
+        expect(result.result).toEqual(
+          expect.objectContaining({
+            voiceScript: 'Namaste! Aapka payment complete nahi hua.',
+            voiceAudioBase64: 'ZmFrZS1hdWRpby1ieXRlcw==',
+            voiceAudioMimeType: 'audio/wav',
+          }),
+        );
+      });
+
+      it('marks the action FAILED (not thrown) when the agent service errors', async () => {
+        (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+          baseCase({
+            customer: { id: 'customer-1', name: 'Test', email: 't@example.com', phone: '9999999999', razorpayCustomerId: null },
+            actions: [
+              { id: 'action-1', type: 'SEND_VOICE_MESSAGE', status: 'PENDING', policyDecision: 'ALLOW' },
+            ],
+          }),
+        );
+        fetchMock.mockResolvedValue({ ok: false, status: 503 });
+
+        const result = await service.executeRecoveryAction('case-1');
+
+        expect(result.status).toBe('FAILED');
+      });
+
+      it('marks the action FAILED when the agent service is unreachable, without throwing out of executeRecoveryAction', async () => {
+        (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+          baseCase({
+            customer: { id: 'customer-1', name: 'Test', email: 't@example.com', phone: '9999999999', razorpayCustomerId: null },
+            actions: [
+              { id: 'action-1', type: 'SEND_VOICE_MESSAGE', status: 'PENDING', policyDecision: 'ALLOW' },
+            ],
+          }),
+        );
+        fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+
+        const result = await service.executeRecoveryAction('case-1');
+
+        expect(result.status).toBe('FAILED');
+      });
+    });
+  });
+
+  describe('observeRecovery — outcome semantics', () => {
+    function observeCase(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'case-1',
+        merchantId: 'merchant-1',
+        orderId: null,
+        status: 'IN_PROGRESS',
+        payment: { id: 'payment-1', amount: '500', status: 'FAILED' },
+        invoice: null,
+        subscription: null,
+        outcome: null,
+        actions: [
+          { id: 'action-1', type: 'SEND_VOICE_MESSAGE', status: 'SUCCESS' },
+        ],
+        ...overrides,
+      };
+    }
+
+    it('does not create a RecoveryOutcome when a voice message succeeded but the payment is still not captured', async () => {
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+        observeCase(),
+      );
+
+      const result = await service.observeRecovery('case-1');
+
+      expect(prisma.recoveryOutcome.create).not.toHaveBeenCalled();
+      expect(prisma.recoveryCase.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'RECOVERED' }) }),
+      );
+      expect(result.successful).toBe(false);
+    });
+
+    it('creates a RecoveryOutcome only once the payment is genuinely CAPTURED, regardless of which action succeeded', async () => {
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue(
+        observeCase({
+          payment: { id: 'payment-1', amount: '500', status: 'CAPTURED' },
+        }),
+      );
+      (prisma.recoveryOutcome.create as jest.Mock).mockResolvedValue({
+        id: 'outcome-1',
+        recoveredAmount: 500,
+        successful: true,
+      });
+
+      const result = await service.observeRecovery('case-1');
+
+      expect(prisma.recoveryOutcome.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recoveredAmount: 500,
+            recoveryMethod: 'SEND_VOICE_MESSAGE',
+          }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ id: 'outcome-1', successful: true }),
+      );
     });
   });
 });

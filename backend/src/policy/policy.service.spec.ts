@@ -8,6 +8,8 @@ describe('PolicyService', () => {
   const prisma = {
     policy: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
+      createMany: jest.fn(),
       update: jest.fn(),
     },
     recoveryCase: {
@@ -143,6 +145,78 @@ describe('PolicyService', () => {
       );
 
       expect(result.decision).toBe('ALLOW');
+    });
+  });
+
+  describe('syncDefaultPolicies', () => {
+    it('creates only the missing action types and leaves existing rows untouched', async () => {
+      (prisma.policy.findMany as jest.Mock).mockResolvedValue([
+        { actionType: 'RETRY_PAYMENT' },
+        { actionType: 'SEND_PAYMENT_LINK' },
+        { actionType: 'SEND_EMAIL' },
+        { actionType: 'SEND_WHATSAPP' },
+        { actionType: 'UPDATE_PAYMENT_METHOD' },
+        { actionType: 'FOLLOW_UP_RECEIVABLE' },
+        { actionType: 'ESCALATE_HUMAN' },
+        { actionType: 'STOP_RECOVERY' },
+      ]);
+
+      const result = await service.syncDefaultPolicies('merchant-1', {
+        id: 'user-1',
+      });
+
+      expect(prisma.policy.createMany).toHaveBeenCalledTimes(1);
+      const call = (prisma.policy.createMany as jest.Mock).mock.calls[0][0];
+      expect(call.data).toHaveLength(1);
+      expect(call.data[0]).toMatchObject({
+        merchantId: 'merchant-1',
+        actionType: 'SEND_VOICE_MESSAGE',
+        enabled: true,
+      });
+      expect(result.created).toEqual(['SEND_VOICE_MESSAGE']);
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-1',
+          action: 'POLICY_DEFAULTS_SYNCED',
+          details: { createdActionTypes: ['SEND_VOICE_MESSAGE'] },
+        }),
+      );
+    });
+
+    it('does nothing when the merchant already has every default policy', async () => {
+      (prisma.policy.findMany as jest.Mock).mockResolvedValue([
+        { actionType: 'RETRY_PAYMENT' },
+        { actionType: 'SEND_PAYMENT_LINK' },
+        { actionType: 'SEND_EMAIL' },
+        { actionType: 'SEND_WHATSAPP' },
+        { actionType: 'UPDATE_PAYMENT_METHOD' },
+        { actionType: 'FOLLOW_UP_RECEIVABLE' },
+        { actionType: 'SEND_VOICE_MESSAGE' },
+        { actionType: 'ESCALATE_HUMAN' },
+        { actionType: 'STOP_RECOVERY' },
+      ]);
+
+      const result = await service.syncDefaultPolicies('merchant-1', {
+        id: 'user-1',
+      });
+
+      expect(prisma.policy.createMany).not.toHaveBeenCalled();
+      expect(auditService.record).not.toHaveBeenCalled();
+      expect(result.created).toEqual([]);
+    });
+
+    it('never re-creates or re-enables a policy the merchant has already customized (e.g. disabled)', async () => {
+      (prisma.policy.findMany as jest.Mock).mockResolvedValue([
+        { actionType: 'SEND_WHATSAPP' },
+      ]);
+
+      await service.syncDefaultPolicies('merchant-1', { id: 'user-1' });
+
+      const call = (prisma.policy.createMany as jest.Mock).mock.calls[0][0];
+      const createdTypes = call.data.map(
+        (policy: { actionType: string }) => policy.actionType,
+      );
+      expect(createdTypes).not.toContain('SEND_WHATSAPP');
     });
   });
 

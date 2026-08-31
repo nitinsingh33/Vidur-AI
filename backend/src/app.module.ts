@@ -27,6 +27,7 @@ import { MandatesModule } from './mandates/mandates.module';
 import { RecoveryAutoModule } from './recovery-auto/recovery-auto.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { RecoveryLabModule } from './recovery-lab/recovery-lab.module';
+import { PromiseToPayModule } from './promise-to-pay/promise-to-pay.module';
 
 /**
  * Local dev has no REDIS_URL and just talks to the Redis container on
@@ -95,6 +96,7 @@ function buildRedisConnection() {
     RecoveryAutoModule,
     StorefrontModule,
     RecoveryLabModule,
+    PromiseToPayModule,
   ],
   controllers: [AppController],
   providers: [AppService],

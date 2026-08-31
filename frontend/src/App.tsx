@@ -23,6 +23,7 @@ import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
 import { CheckoutDropOff } from './pages/CheckoutDropOff'
 import { Receivables } from './pages/Receivables'
+import { PromiseToPay } from './pages/PromiseToPay'
 import { Subscriptions } from './pages/Subscriptions'
 import { Mandates } from './pages/Mandates'
 import { AgentActivity } from './pages/AgentActivity'
@@ -88,6 +89,11 @@ function AppShell() {
               <Route
                 path="/receivables"
                 element={<Receivables />}
+              />
+
+              <Route
+                path="/promise-to-pay"
+                element={<PromiseToPay />}
               />
 
               <Route

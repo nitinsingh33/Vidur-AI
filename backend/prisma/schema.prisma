@@ -99,6 +99,11 @@ enum RecoveryActionType {
   SEND_WHATSAPP
   UPDATE_PAYMENT_METHOD
   FOLLOW_UP_RECEIVABLE
+  /// A real, AI-generated Hinglish voice message (see RecoveryService.
+  /// sendVoiceMessage and the agent's /generate-voice-message endpoint) —
+  /// never a placed phone call. Selected as a channel-escalation step after
+  /// repeated SEND_PAYMENT_LINK/RETRY_PAYMENT attempts, before ESCALATE_HUMAN.
+  SEND_VOICE_MESSAGE
   ESCALATE_HUMAN
   STOP_RECOVERY
 }
@@ -122,6 +127,12 @@ enum RecoveryBatchStatus {
   DETECTED
   RUNNING
   COMPLETED
+}
+
+enum PromiseStatus {
+  PENDING
+  KEPT
+  MISSED
 }
 
 model Merchant {
@@ -160,6 +171,7 @@ model Merchant {
   recoveryBatches RecoveryBatch[]
   policies       Policy[]
   auditLogs      AuditLog[]
+  promisesToPay  PromiseToPay[]
 }
 
 /**
@@ -223,6 +235,7 @@ model Customer {
   subscriptions Subscription[]
   mandates      Mandate[]
   recoveryCases RecoveryCase[]
+  promisesToPay PromiseToPay[]
 
   @@unique([merchantId, externalId])
   @@index([merchantId])
@@ -402,6 +415,7 @@ model Invoice {
   merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   recoveryCases RecoveryCase[]
+  promisesToPay PromiseToPay[]
 
   @@index([merchantId])
   @@index([customerId])
@@ -439,9 +453,10 @@ model RecoveryCase {
   mandate      Mandate?       @relation(fields: [mandateId], references: [id], onDelete: SetNull)
   batch        RecoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
-  actions   RecoveryAction[]
-  outcome   RecoveryOutcome?
-  auditLogs AuditLog[]
+  actions       RecoveryAction[]
+  outcome       RecoveryOutcome?
+  auditLogs     AuditLog[]
+  promisesToPay PromiseToPay[]
 
   @@index([merchantId])
   @@index([customerId])
@@ -529,6 +544,50 @@ model Policy {
 
   @@index([merchantId])
   @@index([actionType])
+}
+
+/**
+ * A genuine, first-class commitment a real customer made to pay an overdue
+ * receivable by a future date — captured by a merchant after speaking with
+ * the customer (see PromiseToPayService.create), never predefined/seeded.
+ * Verification never trusts the promise itself: PromiseToPaySweepService
+ * only ever reads the linked RecoveryCase's own status/outcome — the same
+ * real webhook- or markPaid-derived ground truth every other recovery path
+ * already relies on — to decide KEPT vs MISSED.
+ */
+model PromiseToPay {
+  id              String        @id @default(uuid())
+  merchantId      String
+  recoveryCaseId  String
+  invoiceId       String
+  customerId      String
+  promisedAmount  Decimal       @db.Decimal(18, 2)
+  promisedDate    DateTime
+  status          PromiseStatus @default(PENDING)
+  /// How this promise was captured. Always merchant-recorded today — there is
+  /// no inbound conversational channel that could auto-capture a promise
+  /// from a real customer reply yet (the same honesty convention as the B2B
+  /// "Mark Paid" merchant attestation elsewhere).
+  source          String        @default("MERCHANT_RECORDED")
+  notes           String?
+  /// Copied verbatim from the real RecoveryOutcome once the linked case is
+  /// verified RECOVERED — never independently computed, so this can never
+  /// diverge from (or fabricate ahead of) the real provider-confirmed amount.
+  recoveredAmount Decimal?      @db.Decimal(18, 2)
+  resolvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  merchant     Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([recoveryCaseId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([promisedDate])
 }
 
 model AuditLog {

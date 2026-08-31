@@ -5,6 +5,7 @@ import { CheckoutSweepService } from '../checkout-sweep/checkout-sweep.service';
 import { InvoiceOverdueSweepService } from '../invoices/invoice-overdue-sweep.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
+import { PromiseToPayService } from '../promise-to-pay/promise-to-pay.service';
 import { RecoveryLabService } from './recovery-lab.service';
 
 describe('RecoveryLabService', () => {
@@ -45,6 +46,10 @@ describe('RecoveryLabService', () => {
     runAutomaticRecovery: jest.fn().mockResolvedValue(undefined),
   } as unknown as RecoveryAutoOrchestratorService;
 
+  const promiseToPayService = {
+    create: jest.fn(),
+  } as unknown as PromiseToPayService;
+
   beforeEach(() => {
     jest.clearAllMocks();
     (prisma.customer.upsert as jest.Mock).mockResolvedValue({ id: 'lab-customer' });
@@ -56,6 +61,7 @@ describe('RecoveryLabService', () => {
       invoiceOverdueSweepService,
       invoicesService,
       autoOrchestrator,
+      promiseToPayService,
     );
   });
 
@@ -150,5 +156,52 @@ describe('RecoveryLabService', () => {
     );
     expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-5');
     expect(result.recoveryCaseId).toBe('case-5');
+  });
+
+  it('launchPromiseToPay creates a real overdue invoice and a real promise via PromiseToPayService, never a fabricated outcome', async () => {
+    (invoicesService.create as jest.Mock).mockResolvedValue({ id: 'invoice-6' });
+    (invoiceOverdueSweepService.sweepOnce as jest.Mock).mockResolvedValue({
+      scanned: 1,
+      opened: 1,
+      caseIds: ['case-6'],
+    });
+    (promiseToPayService.create as jest.Mock).mockResolvedValue({ id: 'promise-1' });
+
+    const result = await service.launchPromiseToPay(
+      'merchant-1',
+      {},
+      'user-1',
+    );
+
+    expect(invoicesService.create).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ customerId: 'lab-customer' }),
+    );
+    expect(promiseToPayService.create).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ recoveryCaseId: 'case-6' }),
+      { id: 'user-1' },
+    );
+    expect(prisma.recoveryOutcome.create).not.toHaveBeenCalled();
+    expect(result.recoveryCaseId).toBe('case-6');
+    expect(result.promiseId).toBe('promise-1');
+  });
+
+  it('launchPromiseToPay does not attempt to record a promise if no recovery case was opened', async () => {
+    (invoicesService.create as jest.Mock).mockResolvedValue({ id: 'invoice-7' });
+    (invoiceOverdueSweepService.sweepOnce as jest.Mock).mockResolvedValue({
+      scanned: 0,
+      opened: 0,
+      caseIds: [],
+    });
+
+    const result = await service.launchPromiseToPay(
+      'merchant-1',
+      {},
+      'user-1',
+    );
+
+    expect(promiseToPayService.create).not.toHaveBeenCalled();
+    expect(result.recoveryCaseId).toBeNull();
   });
 });

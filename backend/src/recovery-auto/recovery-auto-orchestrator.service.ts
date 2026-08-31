@@ -96,13 +96,9 @@ export class RecoveryAutoOrchestratorService {
            * above) always records its own terminal action, so this
            * placeholder is now superseded — remove it rather than leaving a
            * stuck PENDING row sitting next to the real SUCCESS one in the
-           * case's audit timeline. Guarded on status so a concurrent
-           * execution that already moved this exact row past PENDING is
-           * left untouched.
+           * case's audit timeline.
            */
-          await this.prisma.recoveryAction.deleteMany({
-            where: { id: action.id, status: 'PENDING' },
-          });
+          await this.deletePendingPlaceholder(action.id);
 
           return;
         }
@@ -122,6 +118,25 @@ export class RecoveryAutoOrchestratorService {
       }
 
       await this.maybeEscalate(recoveryCaseId, policyResult.reason);
+
+      /*
+       * A BLOCK decision means this ordinary action (e.g. FOLLOW_UP_RECEIVABLE,
+       * RETRY_PAYMENT) will never be executed — createStrategyForCase already
+       * created it as PENDING before policy was checked. Unlike
+       * REQUIRE_APPROVAL, where the same PENDING action is exactly what a
+       * human approves via POST /actions/:id/approve to unblock it (and so
+       * must survive), a BLOCK is terminal for this action: delete the
+       * placeholder so the case's audit timeline shows one terminal
+       * escalation action (or nothing, if the case turned out to already be
+       * terminal/recovered) rather than a misleading pending+success pair.
+       * Deleted unconditionally on BLOCK, independent of whether
+       * maybeEscalate above actually escalated — a case that was already
+       * RECOVERED/STOPPED/EXHAUSTED and produced a stray PENDING action here
+       * is just as misleading and just as safe to clean up.
+       */
+      if (policyResult.decision === 'BLOCK') {
+        await this.deletePendingPlaceholder(action.id);
+      }
     } catch (error) {
       this.logger.error(
         `Automatic recovery failed for case ${recoveryCaseId}: ` +
@@ -230,5 +245,18 @@ export class RecoveryAutoOrchestratorService {
     }
 
     await this.escalationService.escalateRecoveryCase(recoveryCaseId, reason);
+  }
+
+  /**
+   * Deletes a still-PENDING placeholder action that will never be executed
+   * (the strategy directly selected escalation, or policy just BLOCKed it).
+   * Guarded on status so a concurrent execution that already moved this
+   * exact row past PENDING (e.g. into APPROVED/EXECUTING via a race with a
+   * human approval) is left untouched.
+   */
+  private async deletePendingPlaceholder(actionId: string) {
+    await this.prisma.recoveryAction.deleteMany({
+      where: { id: actionId, status: 'PENDING' },
+    });
   }
 }

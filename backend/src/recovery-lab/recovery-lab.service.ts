@@ -7,6 +7,7 @@ import { CheckoutSweepService } from '../checkout-sweep/checkout-sweep.service';
 import { InvoiceOverdueSweepService } from '../invoices/invoice-overdue-sweep.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
+import { PromiseToPayService } from '../promise-to-pay/promise-to-pay.service';
 import { PaymentMethod, PaymentStatus } from '../generated/prisma/enums';
 import { LaunchScenarioDto } from './dto/launch-scenario.dto';
 
@@ -33,6 +34,7 @@ export class RecoveryLabService {
     private readonly invoiceOverdueSweepService: InvoiceOverdueSweepService,
     private readonly invoicesService: InvoicesService,
     private readonly autoOrchestrator: RecoveryAutoOrchestratorService,
+    private readonly promiseToPayService: PromiseToPayService,
   ) {}
 
   private async getOrCreateLabCustomer(merchantId: string, customerName?: string) {
@@ -222,6 +224,78 @@ export class RecoveryLabService {
       recoveryCaseId: recoveryCase.id,
       instructions:
         'A real mandate was created in a paused state and handed to Vidur\'s automatic pipeline. Since a paused mandate has no valid token to charge, Vidur correctly escalates it for human follow-up rather than attempting a debit.',
+    };
+  }
+
+  /**
+   * Scenario 6: Promise-to-Pay — a real overdue Invoice (same as scenario 4),
+   * plus a genuine PromiseToPay record created through the exact same
+   * PromiseToPayService.create() a merchant's own UI calls. This never
+   * fabricates KEPT/MISSED/RECOVERED: the promised date defaults to a couple
+   * of minutes out (configurable via promisedInMinutes) purely so a judge
+   * doesn't have to wait days for the real verification sweep to matter —
+   * the sweep itself, and what happens on a miss (the real Detection ->
+   * Strategy -> Policy -> Action -> Observe pipeline), are both completely
+   * unmodified production code.
+   */
+  async launchPromiseToPay(
+    merchantId: string,
+    dto: LaunchScenarioDto,
+    actorId: string,
+  ) {
+    const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+
+    const overdueDueDate = new Date();
+    overdueDueDate.setDate(overdueDueDate.getDate() - 10);
+
+    const amount = dto.amount ?? 60000;
+
+    const invoice = await this.invoicesService.create(merchantId, {
+      customerId: customer.id,
+      amount,
+      currency: 'INR',
+      dueDate: overdueDueDate.toISOString(),
+    });
+
+    const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(merchantId);
+    const recoveryCaseId = sweepResult.caseIds[0] ?? null;
+
+    if (!recoveryCaseId) {
+      return {
+        scenario: 'PROMISE_TO_PAY',
+        invoiceId: invoice.id,
+        recoveryCaseId: null,
+        promiseId: null,
+        instructions:
+          'The invoice was created but no recovery case was opened for it — try launching again.',
+      };
+    }
+
+    const promisedInMinutes = dto.promisedInMinutes ?? 2;
+    const promisedDate = new Date(Date.now() + promisedInMinutes * 60 * 1000);
+
+    const promise = await this.promiseToPayService.create(
+      merchantId,
+      {
+        recoveryCaseId,
+        promisedAmount: amount,
+        promisedDate: promisedDate.toISOString(),
+        notes: 'Recovery Lab: customer promised to pay the overdue invoice by the promised date.',
+      },
+      { id: actorId },
+    );
+
+    return {
+      scenario: 'PROMISE_TO_PAY',
+      invoiceId: invoice.id,
+      recoveryCaseId,
+      promiseId: promise.id,
+      promisedDate: promisedDate.toISOString(),
+      instructions:
+        `A real overdue invoice and a genuine promise to pay by ${promisedDate.toLocaleString()} were recorded. ` +
+        'To see it KEPT: mark the invoice paid from Receivables before that time, then run the promise sweep. ' +
+        'To see it MISSED: do nothing and run the promise sweep after that time from the Promise-to-Pay page — ' +
+        'Vidur will hand the case back to its real automatic recovery pipeline.',
     };
   }
 }

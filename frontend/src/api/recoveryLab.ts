@@ -10,7 +10,7 @@ export interface LaunchScenarioResult {
 async function post(
   path: string,
   token: string,
-  body: { amount?: number; customerName?: string },
+  body: { amount?: number; customerName?: string; promisedInMinutes?: number },
 ): Promise<LaunchScenarioResult> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
@@ -49,4 +49,11 @@ export function launchInvoiceOverdue(token: string, body: { amount?: number; cus
 
 export function launchMandateFailure(token: string, body: { amount?: number; customerName?: string } = {}) {
   return post('/recovery-lab/mandate-failure', token, body)
+}
+
+export function launchPromiseToPay(
+  token: string,
+  body: { amount?: number; customerName?: string; promisedInMinutes?: number } = {},
+) {
+  return post('/recovery-lab/promise-to-pay', token, body)
 }

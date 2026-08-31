@@ -63,4 +63,16 @@ export class RecoveryLabController {
       dto,
     );
   }
+
+  @Post('promise-to-pay')
+  launchPromiseToPay(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Body() dto: LaunchScenarioDto,
+  ) {
+    return this.recoveryLabService.launchPromiseToPay(
+      request.user.merchantId,
+      dto,
+      request.user.sub,
+    );
+  }
 }

@@ -16,6 +16,11 @@ export interface RecoveryAction {
     escalated?: boolean
     paymentLinkId?: string
     paymentLinkShortUrl?: string
+    /** Present only for SEND_VOICE_MESSAGE — a real Gemini-generated
+     *  Hinglish script and Gemini-synthesized audio, never a placed call. */
+    voiceScript?: string
+    voiceAudioBase64?: string
+    voiceAudioMimeType?: string
   } | null
 
   externalReferenceId?: string | null
@@ -65,7 +70,13 @@ export interface RecoveryCase {
     events?: PaymentEvent[]
   } | null
 
-  invoice?: Record<string, unknown> | null
+  invoice?: {
+    id: string
+    amount: string
+    currency: string
+    status: string
+    dueDate: string
+  } | null
 
   order?: {
     id: string

@@ -13,6 +13,7 @@ import {
 import { getRecoveryCase, type RecoveryCase } from "../api/recoveryCases";
 import { getCaseAuditTrail, type AuditLogEntry } from "../api/audit";
 import { VidurRecoveryPanel } from "../components/recovery/VidurRecoveryPanel";
+import { PromiseToPayPanel } from "../components/recovery/PromiseToPayPanel";
 import { AgentAuditTrail } from "../components/recovery/AgentAuditTrail";
 import { AgentReasoningCard } from "../components/recovery/AgentReasoningCard";
 import { StatusBadge } from "../components/ui/status-badge";
@@ -517,6 +518,24 @@ export function RecoveryCaseDetails() {
                         tone={policyTone(action.policyDecision)}
                       />
                     )}
+
+                    {action.result?.voiceAudioBase64 && (
+                      <div className="mt-3 max-w-md rounded-lg border border-border bg-secondary/20 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                          AI-generated Hinglish voice message — no call was placed
+                        </p>
+                        {action.result.voiceScript && (
+                          <p className="mt-1.5 text-xs italic leading-relaxed text-muted-foreground">
+                            &ldquo;{action.result.voiceScript}&rdquo;
+                          </p>
+                        )}
+                        <audio
+                          className="mt-2 h-9 w-full"
+                          controls
+                          src={`data:${action.result.voiceAudioMimeType ?? 'audio/wav'};base64,${action.result.voiceAudioBase64}`}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -563,6 +582,9 @@ export function RecoveryCaseDetails() {
           </strong>
         </article>
       )}
+
+      {/* B2B receivables: promise-to-pay */}
+      <PromiseToPayPanel recoveryCase={recoveryCase} />
 
       {/* Compliance */}
       <AgentAuditTrail entries={auditTrail} />

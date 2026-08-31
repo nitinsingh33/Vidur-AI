@@ -89,6 +89,16 @@ const MANDATE_STATUS_TONE: Record<string, Tone> = {
   CANCELLED: 'neutral',
 }
 
+const PROMISE_STATUS_TONE: Record<string, Tone> = {
+  PENDING: 'amber',
+  KEPT: 'emerald',
+  MISSED: 'rose',
+}
+
+export function promiseStatusTone(status: string | null | undefined): Tone {
+  return PROMISE_STATUS_TONE[status ?? ''] ?? 'neutral'
+}
+
 export function toneClasses(tone: Tone) {
   return TONE_CLASSES[tone]
 }

@@ -28,6 +28,38 @@ export async function getPolicies(token: string): Promise<Policy[]> {
   return response.json()
 }
 
+export interface SyncDefaultPoliciesResult {
+  created: string[]
+}
+
+/**
+ * Backfills any newly-introduced default policy (e.g. SEND_VOICE_MESSAGE)
+ * this merchant doesn't already have a row for. Never touches or re-enables
+ * an existing policy, so it's always safe to call — see
+ * PolicyService.syncDefaultPolicies on the backend.
+ */
+export async function syncDefaultPolicies(
+  token: string,
+): Promise<SyncDefaultPoliciesResult> {
+  const response = await fetch(`${API_BASE_URL}/policies/sync-defaults`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    let message = `Policy sync failed: ${response.status}`
+    try {
+      const body = await response.json()
+      if (typeof body.message === 'string') message = body.message
+    } catch {
+      // fall through to status-based message
+    }
+    throw new Error(message)
+  }
+
+  return response.json()
+}
+
 export interface UpdatePolicyPayload {
   decision?: string
   maxRetries?: number | null

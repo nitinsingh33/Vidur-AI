@@ -49,6 +49,7 @@ describe('RecoveryAutoOrchestratorService', () => {
     );
 
     (recoveryService.createStrategyForCase as jest.Mock).mockResolvedValue({
+      id: 'action-1',
       type: 'SEND_PAYMENT_LINK',
     });
     (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
@@ -212,6 +213,29 @@ describe('RecoveryAutoOrchestratorService', () => {
     );
   });
 
+  it('deletes the dangling PENDING placeholder for a normal action (e.g. FOLLOW_UP_RECEIVABLE) that got policy-BLOCKed and escalated, leaving exactly one terminal action', async () => {
+    (recoveryService.createStrategyForCase as jest.Mock).mockResolvedValue({
+      id: 'action-3',
+      type: 'FOLLOW_UP_RECEIVABLE',
+    });
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'BLOCK',
+      policyId: 'policy-1',
+      reason: 'Retry count exceeds the configured policy limit of 3.',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(escalationService.escalateRecoveryCase).toHaveBeenCalledWith(
+      'case-1',
+      'Retry count exceeds the configured policy limit of 3.',
+    );
+    expect(recoveryService.executeRecoveryAction).not.toHaveBeenCalled();
+    expect(prisma.recoveryAction.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'action-3', status: 'PENDING' },
+    });
+  });
+
   it('does NOT escalate a BLOCK that means "already recovered" — never flips a terminal case', async () => {
     (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
       id: 'case-1',
@@ -226,6 +250,40 @@ describe('RecoveryAutoOrchestratorService', () => {
     await service.runAutomaticRecovery('case-1');
 
     expect(escalationService.escalateRecoveryCase).not.toHaveBeenCalled();
+  });
+
+  it('still cleans up the dangling PENDING placeholder on a BLOCK even when the case turned out to already be terminal (no escalation fired)', async () => {
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      status: 'RECOVERED',
+    });
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'BLOCK',
+      policyId: 'ALREADY_RECOVERED',
+      reason: 'This case already has a verified recovery outcome.',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(prisma.recoveryAction.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'action-1', status: 'PENDING' },
+    });
+  });
+
+  it('does NOT delete the PENDING action on REQUIRE_APPROVAL — a human must still be able to approve it via POST /actions/:id/approve', async () => {
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'REQUIRE_APPROVAL',
+      policyId: 'policy-1',
+      reason: 'Customer contact limit reached.',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(escalationService.escalateRecoveryCase).toHaveBeenCalledWith(
+      'case-1',
+      'Customer contact limit reached.',
+    );
+    expect(prisma.recoveryAction.deleteMany).not.toHaveBeenCalled();
   });
 
   it('escalates on REQUIRE_APPROVAL for the first detection-time pass (default)', async () => {

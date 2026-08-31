@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  CalendarClock,
   CreditCard,
   ExternalLink,
   FileText,
@@ -15,6 +16,7 @@ import {
   launchInvoiceOverdue,
   launchMandateFailure,
   launchPaymentFailure,
+  launchPromiseToPay,
   launchSubscriptionFailure,
   type LaunchScenarioResult,
 } from '../api/recoveryLab'
@@ -68,6 +70,14 @@ const SCENARIOS: Scenario[] = [
     description:
       'Creates a real paused mandate. Since there\'s no valid token to charge, Vidur correctly escalates it rather than fabricating a retry.',
     launch: launchMandateFailure,
+  },
+  {
+    key: 'promise-to-pay',
+    title: 'Promise-to-Pay',
+    icon: CalendarClock,
+    description:
+      'Creates a real overdue invoice and records a genuine promise to pay a couple of minutes out. Mark the invoice paid (or don\'t) and run the promise sweep from the Promise-to-Pay page to see it resolve for real — KEPT or MISSED, never fabricated.',
+    launch: launchPromiseToPay,
   },
 ]
 

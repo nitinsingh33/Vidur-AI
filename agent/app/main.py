@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.graph.workflow import build_recovery_graph
 from app.llm.diagnosis import generate_diagnosis
+from app.llm.voice_message import generate_voice_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -74,6 +75,26 @@ class DiagnosisResponse(BaseModel):
     reasoning: str | None
 
 
+class VoiceMessageRequest(BaseModel):
+    """
+    Context for one recovery case, already assembled by RecoveryService
+    (see sendVoiceMessage) — the same "caller already decided, this only
+    narrates/generates" contract as DiagnosisRequest above. This endpoint
+    never touches policy, execution, or case state; it only returns a real
+    script and real synthesized audio for the caller to store.
+    """
+
+    root_cause: str | None = None
+    payment_amount: float | None = None
+    customer_name: str | None = None
+
+
+class VoiceMessageResponse(BaseModel):
+    script: str | None
+    audio_base64: str | None
+    mime_type: str | None
+
+
 class RecoveryWorkflowResponse(BaseModel):
     recovery_case_id: str
     success: bool | None
@@ -136,6 +157,32 @@ def diagnose(request: DiagnosisRequest):
     reasoning = generate_diagnosis(request.model_dump())
 
     return DiagnosisResponse(reasoning=reasoning)
+
+
+@app.post(
+    "/generate-voice-message",
+    response_model=VoiceMessageResponse,
+)
+def generate_voice_message_endpoint(request: VoiceMessageRequest):
+    """
+    Real, narrow generation endpoint for the Hinglish voice-message recovery
+    channel: a Gemini-written script and Gemini-synthesized audio for one
+    case, never a placed phone call and never pre-recorded/canned audio.
+    Like /diagnose, this only generates — RecoveryService already decided
+    to send a voice message (via policy) before calling this, and this
+    endpoint has no side effects on case/action state of its own.
+    """
+
+    result = generate_voice_message(request.model_dump())
+
+    if not result:
+        return VoiceMessageResponse(script=None, audio_base64=None, mime_type=None)
+
+    return VoiceMessageResponse(
+        script=result["script"],
+        audio_base64=result["audio_base64"],
+        mime_type=result["mime_type"],
+    )
 
 
 @app.post(

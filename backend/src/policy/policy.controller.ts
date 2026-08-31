@@ -46,6 +46,26 @@ export class PolicyController {
     });
   }
 
+  /**
+   * Backfills any newly-introduced DEFAULT_POLICIES entry (e.g.
+   * SEND_VOICE_MESSAGE) for merchants that signed up before it existed.
+   * Admin-only, additive-only, and idempotent — see
+   * PolicyService.syncDefaultPolicies.
+   */
+  @Post('sync-defaults')
+  @UseGuards(JwtAuthGuard)
+  syncDefaults(@Req() request: Request & { user: AuthenticatedUser }) {
+    if (request.user.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only an admin can sync default recovery policies.',
+      );
+    }
+
+    return this.policyService.syncDefaultPolicies(request.user.merchantId, {
+      id: request.user.sub,
+    });
+  }
+
   @Post('check/:recoveryCaseId/:actionType')
   @UseGuards(AgentOrJwtGuard)
   checkPolicy(

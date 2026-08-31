@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { RecoveryStrategyService } from './recovery-strategy.service';
+import {
+  RecoveryStrategy,
+  RecoveryStrategyService,
+} from './recovery-strategy.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationService } from '../notification/notification.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
@@ -21,6 +24,27 @@ const LINK_DESCRIPTION: Record<string, string> = {
     'a payment link so the customer can pay with a different method',
   FOLLOW_UP_RECEIVABLE: 'a payment link for the overdue invoice',
 };
+
+/** Statuses that count as "this action was actually attempted." */
+const ATTEMPTED_ACTION_STATUSES = ['EXECUTING', 'SUCCESS', 'FAILED'];
+
+/**
+ * The "contact" channels the voice-escalation step applies to. Mandate
+ * root causes (which map straight to ESCALATE_HUMAN — there's no channel
+ * to retry) and every other action type are left untouched.
+ */
+const CONTACT_CHANNEL_TYPES: RecoveryActionType[] = [
+  RecoveryActionType.RETRY_PAYMENT,
+  RecoveryActionType.SEND_PAYMENT_LINK,
+  RecoveryActionType.UPDATE_PAYMENT_METHOD,
+  RecoveryActionType.FOLLOW_UP_RECEIVABLE,
+];
+
+/** After this many attempts on the same contact channel without recovery, escalate to a voice message. */
+const VOICE_ESCALATION_AFTER_ATTEMPTS = 2;
+
+const AGENT_SERVICE_URL =
+  process.env.AGENT_SERVICE_URL ?? 'http://localhost:8001';
 
 
 @Injectable()
@@ -224,11 +248,14 @@ export class RecoveryService {
       where: {
         id: recoveryCaseId,
       },
+      include: {
+        actions: true,
+      },
     });
 
     this.assertOwnership(recoveryCase, recoveryCaseId, merchantId);
 
-    const strategy = this.strategyService.determine(recoveryCase.rootCause);
+    const strategy = this.selectStrategy(recoveryCase);
 
     const existingAction = await this.prisma.recoveryAction.findFirst({
       where: {
@@ -270,6 +297,52 @@ export class RecoveryService {
     });
 
     return action;
+  }
+
+  /**
+   * Wraps RecoveryStrategyService.determine() (a pure rootCause -> channel
+   * function, unchanged) with one additive rule: a case that has already
+   * been contacted VOICE_ESCALATION_AFTER_ATTEMPTS times on its normal
+   * channel without recovering escalates to a real, AI-generated Hinglish
+   * voice message instead of yet another payment link/retry — a genuine
+   * channel change, not a fabricated outcome. Mandate root causes (which
+   * determine() already maps straight to ESCALATE_HUMAN) are untouched,
+   * since there's no channel to retry there at all. Once voice itself is
+   * used up (its own Policy.maxRetries, defaulted to 1 in DEFAULT_POLICIES),
+   * the existing, unmodified exhaustion logic in observeRecovery/
+   * executeRecoveryAction takes over exactly as it does for every other
+   * channel — no new terminal state was introduced.
+   */
+  private selectStrategy(recoveryCase: {
+    rootCause: string | null;
+    actions: { type: RecoveryActionType; status: string }[];
+  }): RecoveryStrategy {
+    const naturalStrategy = this.strategyService.determine(
+      recoveryCase.rootCause,
+    );
+
+    if (!CONTACT_CHANNEL_TYPES.includes(naturalStrategy.actionType)) {
+      return naturalStrategy;
+    }
+
+    const actions = recoveryCase.actions ?? [];
+
+    const attemptsOnNaturalChannel = actions.filter(
+      (item) =>
+        item.type === naturalStrategy.actionType &&
+        ATTEMPTED_ACTION_STATUSES.includes(item.status),
+    ).length;
+
+    if (attemptsOnNaturalChannel < VOICE_ESCALATION_AFTER_ATTEMPTS) {
+      return naturalStrategy;
+    }
+
+    return {
+      actionType: RecoveryActionType.SEND_VOICE_MESSAGE,
+      reason:
+        `Sent ${attemptsOnNaturalChannel} ${naturalStrategy.actionType.toLowerCase().replaceAll('_', ' ')} ` +
+        'attempt(s) without recovery — escalating to a real, AI-generated Hinglish voice message.',
+    };
   }
 
   async executeRecoveryAction(recoveryCaseId: string, merchantId?: string) {
@@ -465,9 +538,11 @@ export class RecoveryService {
       const result =
         action.type === 'SEND_EMAIL'
           ? await this.sendRecoveryEmail(recoveryCase, action)
-          : action.type === 'RETRY_PAYMENT' && mandate
-            ? await this.retryMandateDebit(recoveryCase, mandate)
-            : await this.createAndSendPaymentLink(recoveryCase, action);
+          : action.type === 'SEND_VOICE_MESSAGE'
+            ? await this.sendVoiceMessage(recoveryCase, action)
+            : action.type === 'RETRY_PAYMENT' && mandate
+              ? await this.retryMandateDebit(recoveryCase, mandate)
+              : await this.createAndSendPaymentLink(recoveryCase, action);
 
       const paymentLinkId = (result as { paymentLinkId?: string })
         .paymentLinkId;
@@ -608,6 +683,117 @@ export class RecoveryService {
       reason: 'Recovery email sent via Resend.',
       message: 'Recovery email sent via Resend.',
       channel: action.type,
+    };
+  }
+
+  /**
+   * A real, AI-generated Hinglish voice message — never a placed phone
+   * call. Calls the already-deployed Python agent's /generate-voice-message
+   * endpoint (Gemini text generation for the script, a Gemini TTS model for
+   * the audio) and stores the real returned script + base64 audio on the
+   * action's result. recoveredAmount is always 0 here, same as every other
+   * contact channel — sending a message isn't revenue recovered; only a
+   * genuine Razorpay webhook confirmation is ever allowed to do that. A
+   * generation failure (missing key, model error, HTTP error) is reported
+   * as this specific attempt failing — exactly like a missing customer
+   * contact for a payment link — so it participates in the same bounded
+   * retry/exhaustion accounting as any other channel, never silently
+   * ignored.
+   */
+  private async sendVoiceMessage(
+    recoveryCase: {
+      rootCause: string | null;
+      payment: { amount: unknown } | null;
+      order: { amount: unknown } | null;
+      invoice: { amount: unknown } | null;
+      subscription: { amount: unknown } | null;
+      customer: { name: string; phone: string | null } | null;
+    },
+    action: { type: string },
+  ) {
+    const customer = recoveryCase.customer;
+
+    if (!customer?.phone) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason:
+          'Customer has no phone number on file; cannot send a voice message.',
+        message:
+          'Customer has no phone number on file; cannot send a voice message.',
+        channel: action.type,
+      };
+    }
+
+    const amount = Number(
+      recoveryCase.payment?.amount ??
+        recoveryCase.order?.amount ??
+        recoveryCase.invoice?.amount ??
+        recoveryCase.subscription?.amount ??
+        0,
+    );
+
+    let response: Response;
+
+    try {
+      response = await fetch(`${AGENT_SERVICE_URL}/generate-voice-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          root_cause: recoveryCase.rootCause,
+          payment_amount: amount,
+          customer_name: customer.name,
+        }),
+      });
+    } catch (error) {
+      const message = `Voice message service unreachable: ${error instanceof Error ? error.message : error}`;
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: message,
+        message,
+        channel: action.type,
+      };
+    }
+
+    if (!response.ok) {
+      const message = `Voice message generation service returned HTTP ${response.status}.`;
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: message,
+        message,
+        channel: action.type,
+      };
+    }
+
+    const body = (await response.json()) as {
+      script: string | null;
+      audio_base64: string | null;
+      mime_type: string | null;
+    };
+
+    if (!body.script || !body.audio_base64) {
+      const message =
+        'Voice message generation did not produce a script and audio.';
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: message,
+        message,
+        channel: action.type,
+      };
+    }
+
+    return {
+      successful: true,
+      recoveredAmount: 0,
+      reason: 'AI-generated Hinglish voice message prepared.',
+      message: 'AI-generated Hinglish voice message prepared.',
+      channel: action.type,
+      voiceScript: body.script,
+      voiceAudioBase64: body.audio_base64,
+      voiceAudioMimeType: body.mime_type ?? 'audio/wav',
     };
   }
 

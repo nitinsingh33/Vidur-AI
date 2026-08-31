@@ -69,6 +69,16 @@ export const DEFAULT_POLICIES: DefaultPolicy[] = [
     maxContacts: 5,
   },
   {
+    name: 'Allow Hinglish voice message',
+    description:
+      'Send one AI-generated Hinglish voice message — a channel-escalation ' +
+      'step used after repeated payment-link/retry attempts, before ' +
+      'escalating to a human. Never a placed phone call.',
+    actionType: RecoveryActionType.SEND_VOICE_MESSAGE,
+    decision: PolicyAction.ALLOW,
+    maxRetries: 1,
+  },
+  {
     name: 'Always allow escalation',
     description: 'Escalating to a human is never blocked.',
     actionType: RecoveryActionType.ESCALATE_HUMAN,

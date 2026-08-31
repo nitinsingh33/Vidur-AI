@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
-import { getPolicies, updatePolicy, type Policy } from '../api/policies'
+import {
+  getPolicies,
+  syncDefaultPolicies,
+  updatePolicy,
+  type Policy,
+} from '../api/policies'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Skeleton } from '../components/ui/skeleton'
@@ -25,6 +30,8 @@ export function Policies() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -69,21 +76,60 @@ export function Policies() {
     }
   }
 
+  async function handleSyncDefaults() {
+    if (!token) return
+
+    try {
+      setSyncing(true)
+      setSyncMessage(null)
+      setError(null)
+      const result = await syncDefaultPolicies(token)
+      if (result.created.length > 0) {
+        setSyncMessage(
+          `Added ${result.created.length} new policy${result.created.length === 1 ? '' : 'ies'}: ${result.created.map(formatLabel).join(', ')}.`,
+        )
+        const data = await getPolicies(token)
+        setPolicies(data)
+      } else {
+        setSyncMessage('Already up to date — no new policies to add.')
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to sync default policies.',
+      )
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   return (
     <section className="pb-12">
       <header className="border-b border-border pb-5">
-        <div className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <ShieldCheck size={16} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <ShieldCheck size={16} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                Recovery intelligence
+              </p>
+              <h1 className="mt-0.5 text-2xl font-semibold tracking-[-0.03em] text-foreground">
+                Policies
+              </h1>
+            </div>
           </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Recovery intelligence
-            </p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-              Policies
-            </h1>
-          </div>
+
+          {canEdit && !loading && (
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={handleSyncDefaults}
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/40 disabled:opacity-60"
+            >
+              {syncing ? 'Syncing…' : 'Sync new default policies'}
+            </button>
+          )}
         </div>
 
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">
@@ -92,6 +138,10 @@ export function Policies() {
           fixed or provider-mandated value; these are your configured
           defaults, editable at any time.
         </p>
+
+        {syncMessage && (
+          <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p>
+        )}
       </header>
 
       {loading && (

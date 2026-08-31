@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bot,
+  CalendarClock,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -58,6 +59,11 @@ const navGroups: NavGroup[] = [
         label: 'Receivables',
         icon: FileText,
         path: '/receivables',
+      },
+      {
+        label: 'Promise to Pay',
+        icon: CalendarClock,
+        path: '/promise-to-pay',
       },
       {
         label: 'Subscriptions',
