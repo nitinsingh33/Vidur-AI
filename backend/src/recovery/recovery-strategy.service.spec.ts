@@ -62,6 +62,24 @@ describe('RecoveryStrategyService', () => {
     expect(result.actionType).toBe(RecoveryActionType.UPDATE_PAYMENT_METHOD);
   });
 
+  it('should escalate a rejected mandate registration', () => {
+    const result = service.determine('mandate_registration_rejected');
+
+    expect(result.actionType).toBe(RecoveryActionType.ESCALATE_HUMAN);
+  });
+
+  it('should escalate a paused mandate', () => {
+    const result = service.determine('mandate_paused');
+
+    expect(result.actionType).toBe(RecoveryActionType.ESCALATE_HUMAN);
+  });
+
+  it('should escalate a cancelled mandate', () => {
+    const result = service.determine('mandate_cancelled');
+
+    expect(result.actionType).toBe(RecoveryActionType.ESCALATE_HUMAN);
+  });
+
   it('should escalate repeated failures', () => {
     const result = service.determine('repeated_failure');
 

@@ -58,6 +58,11 @@ interface RazorpaySubscriptionEntity {
   notes?: Record<string, string>;
 }
 
+interface RazorpayTokenEntity {
+  id: string;
+  status?: string;
+}
+
 interface RazorpayWebhookPayload {
   event: string;
   payload?: {
@@ -72,6 +77,9 @@ interface RazorpayWebhookPayload {
     };
     subscription?: {
       entity?: RazorpaySubscriptionEntity;
+    };
+    token?: {
+      entity?: RazorpayTokenEntity;
     };
   };
 }
@@ -183,6 +191,22 @@ export class RazorpayWebhookService {
       return this.handleSubscriptionHalted(payload, eventId);
     }
 
+    if (event === 'token.confirmed') {
+      return this.handleTokenConfirmed(payload, eventId);
+    }
+
+    if (event === 'token.rejected') {
+      return this.handleTokenRejected(payload, eventId);
+    }
+
+    if (event === 'token.paused') {
+      return this.handleTokenPaused(payload, eventId);
+    }
+
+    if (event === 'token.cancelled') {
+      return this.handleTokenCancelled(payload, eventId);
+    }
+
     if (event !== 'payment.failed') {
       return {
         received: true,
@@ -190,7 +214,8 @@ export class RazorpayWebhookService {
         event,
         reason:
           'Event type not handled (payment.failed, payment.captured, payment_link.paid, order.paid, ' +
-          'subscription.charged, subscription.pending, subscription.halted only).',
+          'subscription.charged, subscription.pending, subscription.halted, ' +
+          'token.confirmed, token.rejected, token.paused, token.cancelled only).',
       };
     }
 
@@ -252,12 +277,31 @@ export class RazorpayWebhookService {
       };
     }
 
-    const customer = await this.resolveCustomer(
-      merchantId,
-      entity,
-      customerName,
-      noteCustomerId,
-    );
+    const internalOrder = razorpayOrderId
+      ? await this.razorpayService.findInternalOrderByExternalId(
+          merchantId,
+          razorpayOrderId,
+        )
+      : null;
+
+    /*
+     * An order created with a known customerId (e.g. a mandate debit via
+     * RazorpayService.createRecurringCharge) already has an authoritative
+     * answer — trust it instead of re-deriving one from contact/email,
+     * which would upsert a *different* Customer row (matched by contact,
+     * not id) and silently orphan the cached razorpayCustomerId the
+     * mandate/subscription flow already resolved for this exact customer.
+     */
+    const customer = internalOrder?.customerId
+      ? await this.prisma.customer.findUnique({
+          where: { id: internalOrder.customerId },
+        })
+      : await this.resolveCustomer(
+          merchantId,
+          entity,
+          customerName,
+          noteCustomerId,
+        );
 
     const failureReason =
       entity.error_reason ||
@@ -268,13 +312,6 @@ export class RazorpayWebhookService {
     const method =
       METHOD_MAP[(entity.method ?? '').toLowerCase()] ?? PaymentMethod.OTHER;
     const amountRupees = (Number(entity.amount) / 100).toString();
-
-    const internalOrder = razorpayOrderId
-      ? await this.razorpayService.findInternalOrderByExternalId(
-          merchantId,
-          razorpayOrderId,
-        )
-      : null;
 
     let payment: Awaited<ReturnType<PaymentsService['create']>>;
 
@@ -335,6 +372,18 @@ export class RazorpayWebhookService {
       `Persisted failed payment ${payment.id} (razorpayPaymentId=${razorpayPaymentId}, ` +
         `merchantId=${merchantId}, eventId=${eventId ?? 'unknown'}).`,
     );
+
+    /*
+     * A failed debit against a mandate-backed order counts toward that
+     * mandate's retry ceiling — MandateRetrySequencerService (and a manual
+     * /execute) both refuse to keep retrying once this is exhausted.
+     */
+    if (internalOrder?.mandateId) {
+      await this.prisma.mandate.update({
+        where: { id: internalOrder.mandateId },
+        data: { failedDebitCount: { increment: 1 } },
+      });
+    }
 
     /*
      * If this order already has an open checkout-abandonment case (no
@@ -537,12 +586,16 @@ export class RazorpayWebhookService {
       const method =
         METHOD_MAP[(entity.method ?? '').toLowerCase()] ?? PaymentMethod.OTHER;
       const amountRupees = (Number(entity.amount) / 100).toString();
-      const customer = await this.resolveCustomer(
-        merchantId,
-        entity,
-        customerName,
-        noteCustomerId,
-      );
+      const customer = internalOrder?.customerId
+        ? await this.prisma.customer.findUnique({
+            where: { id: internalOrder.customerId },
+          })
+        : await this.resolveCustomer(
+            merchantId,
+            entity,
+            customerName,
+            noteCustomerId,
+          );
 
       const created = await this.paymentsService.create({
         merchantId,
@@ -949,6 +1002,270 @@ export class RazorpayWebhookService {
     };
   }
 
+  /**
+   * The bank/UPI app completed mandate registration — the token id now
+   * exists and future recurring debits can be charged against it. Correlates
+   * back to the internal Mandate via the authorization payment's order id,
+   * since the token itself didn't exist when the Mandate row was created.
+   */
+  private async handleTokenConfirmed(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const tokenEntity = payload.payload?.token?.entity;
+    const paymentEntity = payload.payload?.payment?.entity;
+
+    if (!tokenEntity?.id || !paymentEntity?.order_id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing token or payment entity.',
+      };
+    }
+
+    const mandate =
+      await this.razorpayService.findInternalMandateByRegistrationOrderId(
+        paymentEntity.order_id,
+      );
+
+    if (!mandate) {
+      this.logger.warn(
+        `token.confirmed webhook for unrecognized registration order ${paymentEntity.order_id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason:
+          'Unrecognized mandate registration — not created by this system.',
+      };
+    }
+
+    if (mandate.status === 'CONFIRMED') {
+      return {
+        received: true,
+        processed: false,
+        duplicate: true,
+        mandateId: mandate.id,
+      };
+    }
+
+    await this.prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { status: 'CONFIRMED', externalId: tokenEntity.id },
+    });
+
+    this.logger.log(
+      `token.confirmed for mandate ${mandate.id} (token=${tokenEntity.id}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    await this.auditService.record({
+      merchantId: mandate.merchantId,
+      action: 'MANDATE_CONFIRMED',
+      actorType: 'SYSTEM',
+      details: {
+        mandateId: mandate.id,
+        razorpayTokenId: tokenEntity.id,
+        eventId: eventId ?? null,
+      },
+    });
+
+    return { received: true, processed: true, mandateId: mandate.id };
+  }
+
+  /**
+   * Mandate registration failed at the bank/UPI-app step. There's no token
+   * and never was — this correlates the same way as token.confirmed, via
+   * the authorization payment's order id.
+   */
+  private async handleTokenRejected(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const paymentEntity = payload.payload?.payment?.entity;
+
+    if (!paymentEntity?.order_id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing payment entity.',
+      };
+    }
+
+    const mandate =
+      await this.razorpayService.findInternalMandateByRegistrationOrderId(
+        paymentEntity.order_id,
+      );
+
+    if (!mandate) {
+      this.logger.warn(
+        `token.rejected webhook for unrecognized registration order ${paymentEntity.order_id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason:
+          'Unrecognized mandate registration — not created by this system.',
+      };
+    }
+
+    await this.prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { status: 'REJECTED' },
+    });
+
+    const recoveryCase = await this.riskService.assessMandateFailure(
+      mandate.id,
+      'MANDATE_REGISTRATION_REJECTED',
+    );
+
+    await this.auditService.record({
+      merchantId: mandate.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'MANDATE_REJECTED',
+      actorType: 'SYSTEM',
+      details: { mandateId: mandate.id, eventId: eventId ?? null },
+    });
+
+    this.logger.log(
+      `token.rejected for mandate ${mandate.id} -> case ${recoveryCase.id} (eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return {
+      received: true,
+      processed: true,
+      mandateId: mandate.id,
+      recoveryCaseId: recoveryCase.id,
+    };
+  }
+
+  /**
+   * The customer paused their UPI Autopay mandate — future debits will fail
+   * until they resume it. Correlates via the token id directly (this
+   * happens well after registration; there's no payment to key off).
+   */
+  private async handleTokenPaused(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const tokenEntity = payload.payload?.token?.entity;
+
+    if (!tokenEntity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing token entity.',
+      };
+    }
+
+    const mandate = await this.razorpayService.findInternalMandateByExternalId(
+      tokenEntity.id,
+    );
+
+    if (!mandate) {
+      this.logger.warn(
+        `token.paused webhook for unrecognized token ${tokenEntity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized token — not created by this system.',
+      };
+    }
+
+    await this.prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { status: 'PAUSED' },
+    });
+
+    const recoveryCase = await this.riskService.assessMandateFailure(
+      mandate.id,
+      'MANDATE_PAUSED',
+    );
+
+    await this.auditService.record({
+      merchantId: mandate.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'MANDATE_PAUSED',
+      actorType: 'SYSTEM',
+      details: { mandateId: mandate.id, eventId: eventId ?? null },
+    });
+
+    this.logger.log(
+      `token.paused for mandate ${mandate.id} -> case ${recoveryCase.id} (eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return {
+      received: true,
+      processed: true,
+      mandateId: mandate.id,
+      recoveryCaseId: recoveryCase.id,
+    };
+  }
+
+  /** The mandate was cancelled outright — no future debits are possible via it, ever. */
+  private async handleTokenCancelled(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const tokenEntity = payload.payload?.token?.entity;
+
+    if (!tokenEntity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing token entity.',
+      };
+    }
+
+    const mandate = await this.razorpayService.findInternalMandateByExternalId(
+      tokenEntity.id,
+    );
+
+    if (!mandate) {
+      this.logger.warn(
+        `token.cancelled webhook for unrecognized token ${tokenEntity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized token — not created by this system.',
+      };
+    }
+
+    await this.prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { status: 'CANCELLED' },
+    });
+
+    const recoveryCase = await this.riskService.assessMandateFailure(
+      mandate.id,
+      'MANDATE_CANCELLED',
+    );
+
+    await this.auditService.record({
+      merchantId: mandate.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'MANDATE_CANCELLED',
+      actorType: 'SYSTEM',
+      details: { mandateId: mandate.id, eventId: eventId ?? null },
+    });
+
+    this.logger.log(
+      `token.cancelled for mandate ${mandate.id} -> case ${recoveryCase.id} (eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return {
+      received: true,
+      processed: true,
+      mandateId: mandate.id,
+      recoveryCaseId: recoveryCase.id,
+    };
+  }
+
   /** Most recent action Vidur actually ran for this case — used to attribute recovered revenue. */
   private async resolveOriginatingActionType(
     recoveryCaseId: string,
@@ -983,7 +1300,11 @@ export class RazorpayWebhookService {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: { id: recoveryCaseId },
       include: {
-        payment: true,
+        payment: {
+          include: {
+            order: true,
+          },
+        },
         order: true,
         invoice: true,
         subscription: true,
@@ -1044,6 +1365,13 @@ export class RazorpayWebhookService {
             await tx.order.update({
               where: { id: recoveryCase.payment.orderId },
               data: { status: 'PAID' },
+            });
+          }
+
+          if (recoveryCase.payment.order?.mandateId) {
+            await tx.mandate.update({
+              where: { id: recoveryCase.payment.order.mandateId },
+              data: { failedDebitCount: 0 },
             });
           }
         } else if (recoveryCase.orderId) {

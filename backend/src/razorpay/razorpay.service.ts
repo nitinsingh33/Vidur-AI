@@ -34,6 +34,22 @@ export interface CreateSubscriptionResult {
   currency: string;
 }
 
+export interface CreateMandateRegistrationResult {
+  id: string;
+  registrationOrderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+  method: 'upi' | 'emandate';
+}
+
+export interface RecurringChargeResult {
+  internalOrderId: string;
+  externalOrderId: string;
+  paymentId: string;
+  status: string;
+}
+
 @Injectable()
 export class RazorpayService {
   private readonly keyId = process.env.RAZORPAY_KEY_ID;
@@ -89,6 +105,9 @@ export class RazorpayService {
     merchantId: string;
     customerId?: string;
     customerName?: string;
+    /** Auto-capture on success — needed for server-initiated charges where
+     *  there's no customer present afterward to trigger a manual capture. */
+    paymentCapture?: boolean;
   }): Promise<RazorpayOrder> {
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -100,6 +119,7 @@ export class RazorpayService {
         amount: Math.round(params.amount * 100),
         currency: params.currency ?? 'INR',
         receipt: `vidur_${randomUUID()}`,
+        ...(params.paymentCapture && { payment_capture: 1 }),
         notes: {
           merchantId: params.merchantId,
           customerId: params.customerId ?? '',
@@ -340,6 +360,259 @@ export class RazorpayService {
     return this.prisma.subscription.findFirst({
       where: { externalId: razorpaySubscriptionId },
     });
+  }
+
+  /**
+   * Mandate registration (UPI Autopay / eNACH) requires a real Razorpay
+   * Customer id, not just contact/email in notes — the recurring-payment
+   * APIs key everything off it. Created lazily on first mandate
+   * registration and cached on the Customer row; `fail_existing: 0` makes
+   * this idempotent (returns the existing Razorpay customer instead of
+   * erroring if one already exists for this contact/email).
+   */
+  private async getOrCreateRazorpayCustomer(customer: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    razorpayCustomerId: string | null;
+  }): Promise<string> {
+    if (customer.razorpayCustomerId) {
+      return customer.razorpayCustomerId;
+    }
+
+    const response = await fetch('https://api.razorpay.com/v1/customers', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${this.basicAuthHeader()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: customer.name,
+        email: customer.email ?? undefined,
+        contact: customer.phone ?? undefined,
+        fail_existing: 0,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay customer creation failed: ${errorBody}`,
+      );
+    }
+
+    const razorpayCustomer = (await response.json()) as { id: string };
+
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: { razorpayCustomerId: razorpayCustomer.id },
+    });
+
+    return razorpayCustomer.id;
+  }
+
+  /**
+   * Registers a real Razorpay recurring mandate (UPI Autopay or eNACH): an
+   * Order carrying a `token` block (max_amount/expire_at/frequency) instead
+   * of a one-off amount. The customer still has to complete authorization
+   * via Razorpay Checkout.js against this order (recurring: true) — that's
+   * a real bank/UPI-app interaction Razorpay itself owns; this call only
+   * gets the mandate to the point where that authorization can happen.
+   * Persists an internal Mandate row (status CREATED) keyed by the
+   * registration order id, since the eventual token id doesn't exist yet.
+   */
+  async createMandateRegistrationOrder(params: {
+    merchantId: string;
+    customer: {
+      id: string;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      razorpayCustomerId: string | null;
+    };
+    maxAmount: number;
+    currency?: string;
+    method: 'upi' | 'emandate';
+    frequency?: string;
+    expireAt: Date;
+  }): Promise<CreateMandateRegistrationResult> {
+    if (!this.keyId) {
+      throw new InternalServerErrorException(
+        'Razorpay credentials are not configured.',
+      );
+    }
+
+    const razorpayCustomerId = await this.getOrCreateRazorpayCustomer(
+      params.customer,
+    );
+
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${this.basicAuthHeader()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: Math.round(params.maxAmount * 100),
+        currency: params.currency ?? 'INR',
+        payment_capture: 1,
+        method: params.method,
+        customer_id: razorpayCustomerId,
+        token: {
+          max_amount: Math.round(params.maxAmount * 100),
+          expire_at: Math.floor(params.expireAt.getTime() / 1000),
+          frequency: params.frequency ?? 'monthly',
+        },
+        notes: {
+          merchantId: params.merchantId,
+          customerId: params.customer.id,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay mandate registration order creation failed: ${errorBody}`,
+      );
+    }
+
+    const order = (await response.json()) as RazorpayOrder;
+
+    const mandate = await this.prisma.mandate.create({
+      data: {
+        merchantId: params.merchantId,
+        customerId: params.customer.id,
+        registrationOrderId: order.id,
+        method: params.method,
+        maxAmount: params.maxAmount,
+        currency: params.currency ?? 'INR',
+        frequency: params.frequency ?? 'monthly',
+        expireAt: params.expireAt,
+        status: 'CREATED',
+      },
+    });
+
+    return {
+      id: mandate.id,
+      registrationOrderId: order.id,
+      amount: params.maxAmount,
+      currency: params.currency ?? 'INR',
+      keyId: this.keyId,
+      method: params.method,
+    };
+  }
+
+  /**
+   * Correlates a token.confirmed/rejected webhook (which carries no
+   * merchant JWT) back to the internal Mandate — via the authorization
+   * payment's order id, since the token id itself doesn't exist until
+   * confirmation.
+   */
+  findInternalMandateByRegistrationOrderId(razorpayOrderId: string) {
+    return this.prisma.mandate.findFirst({
+      where: { registrationOrderId: razorpayOrderId },
+    });
+  }
+
+  /** For token.paused/token.cancelled webhooks, which reference the token id directly. */
+  findInternalMandateByExternalId(razorpayTokenId: string) {
+    return this.prisma.mandate.findFirst({
+      where: { externalId: razorpayTokenId },
+    });
+  }
+
+  /**
+   * The actual "retry" in the mandate retry sequencer: a headless recurring
+   * debit against an already-confirmed mandate's token — no customer
+   * interaction, exactly like a real NPCI/UPI Autopay re-presentment.
+   * Persists an internal Order (mandateId set) so the resulting
+   * payment.captured/payment.failed webhook can find its way back here
+   * through the same generic pipeline every other payment uses — this call
+   * only ever reports "the attempt was made," never "the money arrived."
+   */
+  async createRecurringCharge(params: {
+    merchantId: string;
+    customer: {
+      id: string;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      razorpayCustomerId: string | null;
+    };
+    mandateId: string;
+    razorpayTokenId: string;
+    amount: number;
+    currency?: string;
+  }): Promise<RecurringChargeResult> {
+    const razorpayCustomerId = await this.getOrCreateRazorpayCustomer(
+      params.customer,
+    );
+
+    const order = await this.createOrder({
+      amount: params.amount,
+      currency: params.currency,
+      merchantId: params.merchantId,
+      customerId: params.customer.id,
+      customerName: params.customer.name,
+      paymentCapture: true,
+    });
+
+    const internalOrder = await this.prisma.order.create({
+      data: {
+        merchantId: params.merchantId,
+        customerId: params.customer.id,
+        externalId: order.id,
+        mandateId: params.mandateId,
+        amount: params.amount,
+        currency: order.currency,
+        status: 'CREATED',
+      },
+    });
+
+    const chargeResponse = await fetch(
+      'https://api.razorpay.com/v1/payments/create/recurring',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${this.basicAuthHeader()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: params.customer.email ?? undefined,
+          contact: params.customer.phone ?? undefined,
+          amount: Math.round(params.amount * 100),
+          currency: params.currency ?? 'INR',
+          order_id: order.id,
+          customer_id: razorpayCustomerId,
+          token: params.razorpayTokenId,
+          recurring: '1',
+        }),
+      },
+    );
+
+    if (!chargeResponse.ok) {
+      const errorBody = await chargeResponse.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay recurring charge failed: ${errorBody}`,
+      );
+    }
+
+    const charge = (await chargeResponse.json()) as {
+      id: string;
+      status: string;
+    };
+
+    return {
+      internalOrderId: internalOrder.id,
+      externalOrderId: order.id,
+      paymentId: charge.id,
+      status: charge.status,
+    };
   }
 
   /**

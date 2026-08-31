@@ -77,6 +77,15 @@ export class RecoveryStrategyService {
             "Razorpay exhausted its own retry schedule and halted the subscription. The customer's payment method likely needs updating.",
         };
 
+      case 'mandate_registration_rejected':
+      case 'mandate_paused':
+      case 'mandate_cancelled':
+        return {
+          actionType: RecoveryActionType.ESCALATE_HUMAN,
+          reason:
+            'The mandate itself needs re-authorization — Razorpay has no API to resurrect a rejected, paused, or cancelled mandate. The customer must set it up again.',
+        };
+
       case 'repeated_failure':
         return {
           actionType: RecoveryActionType.ESCALATE_HUMAN,

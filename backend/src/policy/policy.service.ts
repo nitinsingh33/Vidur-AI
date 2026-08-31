@@ -62,6 +62,7 @@ export class PolicyService {
     amount: number,
     retryCount: number,
     contactCount = 0,
+    lastAttemptedAt: Date | null = null,
   ): Promise<PolicyCheckResult> {
     const policy = await this.prisma.policy.findFirst({
       where: {
@@ -86,7 +87,7 @@ export class PolicyService {
       return {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
-        reason: 'Payment amount exceeds the policy limit.',
+        reason: 'Payment amount exceeds the configured policy limit.',
       };
     }
 
@@ -94,7 +95,7 @@ export class PolicyService {
       return {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
-        reason: 'Payment retry count exceeds the policy limit.',
+        reason: `Retry count exceeds the configured policy limit of ${policy.maxRetries}.`,
       };
     }
 
@@ -104,6 +105,35 @@ export class PolicyService {
         policyId: policy.id,
         reason: 'Customer contact limit for this channel has been reached.',
       };
+    }
+
+    /*
+     * A merchant-configurable minimum gap between attempts — this is a
+     * policy setting (editable on the Policies page, defaults to 24h for
+     * RETRY_PAYMENT), never a fixed provider or regulatory rule. This is
+     * what the mandate retry sequencer relies on instead of any hardcoded
+     * interval — see MandateRetrySequencerService.
+     */
+    if (
+      policy.retryIntervalMinutes !== null &&
+      lastAttemptedAt !== null
+    ) {
+      const minutesSinceLastAttempt =
+        (Date.now() - lastAttemptedAt.getTime()) / 60_000;
+
+      if (minutesSinceLastAttempt < policy.retryIntervalMinutes) {
+        const minutesRemaining = Math.ceil(
+          policy.retryIntervalMinutes - minutesSinceLastAttempt,
+        );
+
+        return {
+          decision: PolicyAction.REQUIRE_APPROVAL,
+          policyId: policy.id,
+          reason:
+            `Configured retry policy requires a ${policy.retryIntervalMinutes}-minute gap between attempts; ` +
+            `${minutesRemaining} minute(s) remain. A human can still approve an early retry.`,
+        };
+      }
     }
 
     return {
@@ -123,6 +153,7 @@ export class PolicyService {
       },
       include: {
         payment: true,
+        outcome: true,
       },
     });
 
@@ -130,25 +161,61 @@ export class PolicyService {
       throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
 
+    /*
+     * No blind retries: a case that already has a verified outcome (or is
+     * already marked RECOVERED) is never eligible for further action,
+     * regardless of what the policy says — this is a hard fact, not a
+     * policy preference, and must win over any stale PENDING action a
+     * scheduler run might otherwise pick up after a late webhook recovered
+     * the case out from under it.
+     */
+    if (recoveryCase.outcome || recoveryCase.status === 'RECOVERED') {
+      return {
+        decision: PolicyAction.BLOCK,
+        policyId: 'ALREADY_RECOVERED',
+        reason: 'This case already has a verified recovery outcome.',
+      };
+    }
+
+    /*
+     * STOPPED/EXHAUSTED are terminal — never eligible again. ESCALATED is
+     * deliberately excluded here: it means "paused pending human review,"
+     * and a human's approval (checked just below) is exactly the mechanism
+     * that un-pauses it — blocking it here would make approval impossible.
+     */
+    if (
+      recoveryCase.status === 'STOPPED' ||
+      recoveryCase.status === 'EXHAUSTED'
+    ) {
+      return {
+        decision: PolicyAction.BLOCK,
+        policyId: 'CASE_NOT_ACTIVE',
+        reason: `Case is ${recoveryCase.status.toLowerCase()}; no further automatic action.`,
+      };
+    }
+
     const amount = recoveryCase.payment
       ? Number(recoveryCase.payment.amount)
       : Number(recoveryCase.revenueAtRisk);
 
-    const retryCount = recoveryCase.payment?.attemptNumber ?? 0;
-
     /*
-     * Counts how many times this channel has actually been attempted for
-     * this case before (not just requested) — mirrors RecoveryService's own
-     * attempt-limit bookkeeping so maxContacts and the bounded-retry loop
-     * agree on what "an attempt" means.
+     * How many times this action type has actually been attempted for this
+     * case before (not just requested) — the same real signal drives both
+     * the retry-count limit and the contact-channel cap, since for a
+     * retry-style action they're the same underlying fact.
      */
-    const contactCount = await this.prisma.recoveryAction.count({
+    const pastAttempts = await this.prisma.recoveryAction.findMany({
       where: {
         recoveryCaseId,
         type: actionType as RecoveryActionType,
         status: { in: ['EXECUTING', 'SUCCESS', 'FAILED'] },
       },
+      orderBy: { createdAt: 'desc' },
+      select: { attemptedAt: true },
     });
+
+    const attemptCount = pastAttempts.length;
+    const lastAttemptedAt = pastAttempts[0]?.attemptedAt ?? null;
 
     /*
      * An action a human has already approved must not be re-evaluated —
@@ -179,8 +246,9 @@ export class PolicyService {
       recoveryCase.merchantId,
       actionType as RecoveryActionType,
       amount,
-      retryCount,
-      contactCount,
+      attemptCount,
+      attemptCount,
+      lastAttemptedAt,
     );
 
     const action = await this.prisma.recoveryAction.findFirst({

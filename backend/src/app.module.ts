@@ -23,6 +23,7 @@ import { DemoModule } from './demo/demo.module';
 import { CheckoutSweepModule } from './checkout-sweep/checkout-sweep.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { MandatesModule } from './mandates/mandates.module';
 
 /**
  * Local dev has no REDIS_URL and just talks to the Redis container on
@@ -87,6 +88,7 @@ function buildRedisConnection() {
     CheckoutSweepModule,
     InvoicesModule,
     SubscriptionsModule,
+    MandatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

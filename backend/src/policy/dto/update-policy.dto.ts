@@ -30,6 +30,11 @@ export class UpdatePolicyDto {
   maxAmount?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  retryIntervalMinutes?: number;
+
+  @IsOptional()
   @IsBoolean()
   enabled?: boolean;
 }

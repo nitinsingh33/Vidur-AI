@@ -84,6 +84,15 @@ export interface RecoveryCase {
     nextBillingAt: string | null
   } | null
 
+  mandate?: {
+    id: string
+    method: string
+    maxAmount: string
+    currency: string
+    status: string
+    failedDebitCount: number
+  } | null
+
   actions: RecoveryAction[]
 
   outcome?: RecoveryOutcome | null

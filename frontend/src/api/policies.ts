@@ -10,6 +10,7 @@ export interface Policy {
   maxRetries: number | null
   maxContacts: number | null
   maxAmount: string | null
+  retryIntervalMinutes: number | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -27,10 +28,19 @@ export async function getPolicies(token: string): Promise<Policy[]> {
   return response.json()
 }
 
-export async function updatePolicyDecision(
+export interface UpdatePolicyPayload {
+  decision?: string
+  maxRetries?: number | null
+  maxContacts?: number | null
+  maxAmount?: number | null
+  retryIntervalMinutes?: number | null
+  enabled?: boolean
+}
+
+export async function updatePolicy(
   token: string,
   policyId: string,
-  decision: string,
+  updates: UpdatePolicyPayload,
 ): Promise<Policy> {
   const response = await fetch(`${API_BASE_URL}/policies/${policyId}`, {
     method: 'PATCH',
@@ -38,7 +48,7 @@ export async function updatePolicyDecision(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify(updates),
   })
 
   if (!response.ok) {

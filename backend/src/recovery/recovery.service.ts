@@ -22,9 +22,18 @@ const LINK_DESCRIPTION: Record<string, string> = {
   FOLLOW_UP_RECEIVABLE: 'a payment link for the overdue invoice',
 };
 
+
 @Injectable()
 export class RecoveryService {
-  private readonly MAX_RECOVERY_ATTEMPTS = 3;
+  /**
+   * Safety ceiling only — used solely when a merchant has no Policy row
+   * configured for this action type at all (every merchant gets one from
+   * DEFAULT_POLICIES at signup, so this is a fallback for edge cases, not
+   * the real limit). The actual, merchant-editable limit is
+   * Policy.maxRetries, read fresh per case via getMaxAttempts() below —
+   * never a hardcoded business rule.
+   */
+  private readonly FALLBACK_MAX_ATTEMPTS = 3;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,6 +62,25 @@ export class RecoveryService {
     ) {
       throw new NotFoundException(`Recovery case ${recoveryCaseId} not found.`);
     }
+  }
+
+  /**
+   * The real, merchant-editable attempt ceiling for this action type —
+   * read fresh from the merchant's own Policy row (see the Policies page),
+   * not a hardcoded constant. Every merchant gets a starting default from
+   * DEFAULT_POLICIES at signup, so FALLBACK_MAX_ATTEMPTS only matters if
+   * that policy was somehow deleted.
+   */
+  private async getMaxAttempts(
+    merchantId: string,
+    actionType: RecoveryActionType,
+  ): Promise<number> {
+    const policy = await this.prisma.policy.findFirst({
+      where: { merchantId, actionType, enabled: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return policy?.maxRetries ?? this.FALLBACK_MAX_ATTEMPTS;
   }
 
   async getCaseById(recoveryCaseId: string, merchantId?: string) {
@@ -248,7 +276,15 @@ export class RecoveryService {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: { id: recoveryCaseId },
       include: {
-        payment: true,
+        payment: {
+          include: {
+            order: {
+              include: {
+                mandate: true,
+              },
+            },
+          },
+        },
         customer: true,
         order: true,
         invoice: true,
@@ -311,7 +347,12 @@ export class RecoveryService {
         ['EXECUTING', 'SUCCESS', 'FAILED'].includes(item.status),
     ).length;
 
-    if (attemptsForAction >= this.MAX_RECOVERY_ATTEMPTS) {
+    const maxAttempts = await this.getMaxAttempts(
+      recoveryCase.merchantId,
+      action.type,
+    );
+
+    if (attemptsForAction >= maxAttempts) {
       await this.prisma.recoveryCase.update({
         where: {
           id: recoveryCase.id,
@@ -330,12 +371,12 @@ export class RecoveryService {
         details: {
           actionId: action.id,
           actionType: action.type,
-          reason: `Attempt limit of ${this.MAX_RECOVERY_ATTEMPTS} reached.`,
+          reason: `Configured retry policy limit of ${maxAttempts} attempt(s) reached.`,
         },
       });
 
       throw new NotFoundException(
-        `Recovery attempt limit of ${this.MAX_RECOVERY_ATTEMPTS} reached for ${action.type}.`,
+        `Recovery attempt limit of ${maxAttempts} reached for ${action.type}.`,
       );
     }
 
@@ -350,15 +391,30 @@ export class RecoveryService {
       );
     }
 
-    await this.prisma.recoveryAction.update({
+    /*
+     * Idempotency guard against duplicate scheduler execution: this claim
+     * only succeeds if the action is still PENDING/APPROVED at the moment
+     * of the write. A concurrent call (the scheduled sweep firing at the
+     * same time as a manual "Execute" click, or two overlapping sweeps)
+     * that already flipped it to EXECUTING loses this race and aborts here
+     * instead of firing a second real charge for the same action.
+     */
+    const claim = await this.prisma.recoveryAction.updateMany({
       where: {
         id: action.id,
+        status: { in: ['PENDING', 'APPROVED'] },
       },
       data: {
         status: 'EXECUTING',
         attemptedAt: new Date(),
       },
     });
+
+    if (claim.count === 0) {
+      throw new NotFoundException(
+        `Recovery action ${action.id} is already being executed elsewhere.`,
+      );
+    }
 
     await this.prisma.recoveryCase.update({
       where: {
@@ -380,6 +436,8 @@ export class RecoveryService {
       },
     });
 
+    const mandate = recoveryCase.payment?.order?.mandate ?? null;
+
     try {
       /*
        * Every non-email recovery channel — SEND_PAYMENT_LINK, RETRY_PAYMENT,
@@ -392,6 +450,13 @@ export class RecoveryService {
        * type stored on the case still reflects which intervention Vidur
        * chose (and why), even though the underlying mechanism is shared.
        *
+       * The one exception: a RETRY_PAYMENT whose failed payment came from a
+       * mandate-backed debit (Order.mandateId set) already has a real,
+       * confirmed recurring-payment authorization on file — a payment link
+       * would be redundant and wrong (the customer already delegated this).
+       * That case charges the mandate directly and headlessly, throttled by
+       * MandateRetrySequencerService's NPCI-style retry rules.
+       *
        * Neither this nor sendRecoveryEmail touches Payment/Order/Invoice
        * status — sending a link/email is not revenue recovered. Only a
        * genuine Razorpay confirmation (RazorpayWebhookService: payment.
@@ -400,7 +465,9 @@ export class RecoveryService {
       const result =
         action.type === 'SEND_EMAIL'
           ? await this.sendRecoveryEmail(recoveryCase, action)
-          : await this.createAndSendPaymentLink(recoveryCase, action);
+          : action.type === 'RETRY_PAYMENT' && mandate
+            ? await this.retryMandateDebit(recoveryCase, mandate)
+            : await this.createAndSendPaymentLink(recoveryCase, action);
 
       const paymentLinkId = (result as { paymentLinkId?: string })
         .paymentLinkId;
@@ -431,7 +498,7 @@ export class RecoveryService {
       if (!result.successful) {
         const totalAttempts = attemptsForAction + 1;
 
-        if (totalAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+        if (totalAttempts >= maxAttempts) {
           await this.prisma.recoveryCase.update({
             where: {
               id: recoveryCase.id,
@@ -623,6 +690,105 @@ export class RecoveryService {
     };
   }
 
+  /**
+   * The mandate retry sequencer's actual retry: a headless recurring debit
+   * against an already-confirmed UPI Autopay/eNACH mandate. No payment link
+   * — the customer already delegated recurring debits to this mandate, so a
+   * link would be both redundant and a worse experience. Throttled the same
+   * way whether triggered manually (this method) or by the scheduled
+   * MandateRetrySequencerService, since Razorpay itself does not auto-retry
+   * a failed mandate debit the way it does for Subscriptions.
+   */
+  private async retryMandateDebit(
+    recoveryCase: {
+      merchantId: string;
+      customerId: string | null;
+      customer: {
+        id: string;
+        name: string;
+        email: string | null;
+        phone: string | null;
+        razorpayCustomerId: string | null;
+      } | null;
+      payment: { amount: unknown } | null;
+    },
+    mandate: {
+      id: string;
+      status: string;
+      externalId: string | null;
+      maxAmount: unknown;
+      currency: string;
+      failedDebitCount: number;
+      lastAttemptAt: Date | null;
+    },
+  ) {
+    /*
+     * Hard provider-state facts, not merchant policy — a paused/rejected/
+     * cancelled mandate can never be charged headlessly regardless of what
+     * any policy says. Retry count and retry timing are NOT checked here:
+     * those are merchant-configurable (Policy.maxRetries /
+     * Policy.retryIntervalMinutes, edited on the Policies page) and are
+     * already enforced upstream by PolicyService.checkForRecoveryCase
+     * before this method is ever reached — both the manual "Execute"
+     * button and MandateRetrySequencerService go through that same check,
+     * so there is exactly one place retry policy is decided.
+     */
+    if (mandate.status !== 'CONFIRMED' || !mandate.externalId) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: `Mandate is ${mandate.status.toLowerCase()}, not confirmed; cannot retry the debit headlessly.`,
+        message: `Mandate is ${mandate.status.toLowerCase()}, not confirmed; cannot retry the debit headlessly.`,
+        channel: 'RETRY_PAYMENT',
+      };
+    }
+
+    const customer = recoveryCase.customer;
+
+    if (!customer) {
+      return {
+        successful: false,
+        recoveredAmount: 0,
+        reason: 'Mandate has no customer on file; cannot charge it.',
+        message: 'Mandate has no customer on file; cannot charge it.',
+        channel: 'RETRY_PAYMENT',
+      };
+    }
+
+    const amount = Number(
+      recoveryCase.payment?.amount ?? mandate.maxAmount ?? 0,
+    );
+
+    const charge = await this.razorpayService.createRecurringCharge({
+      merchantId: recoveryCase.merchantId,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        razorpayCustomerId: customer.razorpayCustomerId,
+      },
+      mandateId: mandate.id,
+      razorpayTokenId: mandate.externalId,
+      amount,
+      currency: mandate.currency,
+    });
+
+    await this.prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { lastAttemptAt: new Date() },
+    });
+
+    return {
+      successful: true,
+      recoveredAmount: 0,
+      reason: `Attempted a headless recurring debit of ₹${amount} against the registered mandate (order ${charge.externalOrderId}).`,
+      message: `Attempted a headless recurring debit of ₹${amount} against the registered mandate (order ${charge.externalOrderId}).`,
+      channel: 'RETRY_PAYMENT',
+      mandateOrderId: charge.internalOrderId,
+    };
+  }
+
   async observeRecovery(recoveryCaseId: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
@@ -755,10 +921,14 @@ export class RecoveryService {
         ).length
       : 0;
 
-    const attemptsRemaining = Math.max(
-      this.MAX_RECOVERY_ATTEMPTS - attemptsUsed,
-      0,
-    );
+    const maxAttempts = lastAttemptedAction
+      ? await this.getMaxAttempts(
+          recoveryCase.merchantId,
+          lastAttemptedAction.type,
+        )
+      : this.FALLBACK_MAX_ATTEMPTS;
+
+    const attemptsRemaining = Math.max(maxAttempts - attemptsUsed, 0);
 
     if (attemptsRemaining === 0 && recoveryCase.status !== 'EXHAUSTED') {
       await this.prisma.recoveryCase.update({
@@ -778,7 +948,7 @@ export class RecoveryService {
         actorType: 'AGENT',
         details: {
           attemptsUsed,
-          maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+          maxAttempts,
           paymentStatus: currentStatus,
         },
       });
@@ -801,7 +971,7 @@ export class RecoveryService {
       successful: false,
       paymentStatus: currentStatus,
       attemptsUsed,
-      maxAttempts: this.MAX_RECOVERY_ATTEMPTS,
+      maxAttempts,
       attemptsRemaining,
       shouldRetry: attemptsRemaining > 0,
       shouldStop: attemptsRemaining === 0,

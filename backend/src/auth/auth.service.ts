@@ -91,6 +91,7 @@ export class AuthService {
         maxRetries: policy.maxRetries ?? null,
         maxContacts: policy.maxContacts ?? null,
         maxAmount: policy.maxAmount ?? null,
+        retryIntervalMinutes: policy.retryIntervalMinutes ?? null,
         enabled: true,
       })),
     });

@@ -105,7 +105,10 @@ export class RecoveryCasesService {
       },
     });
 
-    if (!recoveryCase || (merchantId && recoveryCase.merchantId !== merchantId)) {
+    if (
+      !recoveryCase ||
+      (merchantId && recoveryCase.merchantId !== merchantId)
+    ) {
       throw new NotFoundException(`Recovery case ${id} not found.`);
     }
 

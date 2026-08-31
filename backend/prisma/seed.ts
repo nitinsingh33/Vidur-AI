@@ -1,38 +1,14 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type {
-  RecoveryActionType,
-  PolicyAction,
-} from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import fs from "node:fs";
 import path from "node:path";
+import { DEFAULT_POLICIES } from "../src/policy/default-policies";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
-
-interface DefaultPolicy {
-  name: string;
-  description: string;
-  actionType: RecoveryActionType;
-  decision: PolicyAction;
-  maxRetries?: number;
-  maxContacts?: number;
-  maxAmount?: number;
-}
-
-const DEFAULT_POLICIES: DefaultPolicy[] = [
-  { name: "Allow payment retry", description: "Retry failed payments up to 3 times.", actionType: "RETRY_PAYMENT", decision: "ALLOW", maxRetries: 3 },
-  { name: "Allow payment link", description: "Send a payment link up to 3 times.", actionType: "SEND_PAYMENT_LINK", decision: "ALLOW", maxContacts: 3 },
-  { name: "Allow recovery email", description: "Send recovery emails up to 5 times.", actionType: "SEND_EMAIL", decision: "ALLOW", maxContacts: 5 },
-  { name: "Allow WhatsApp reminder", description: "Send WhatsApp reminders up to 3 times.", actionType: "SEND_WHATSAPP", decision: "ALLOW", maxContacts: 3 },
-  { name: "Allow payment method update request", description: "Ask for an updated payment method up to 2 times.", actionType: "UPDATE_PAYMENT_METHOD", decision: "ALLOW", maxContacts: 2 },
-  { name: "Allow receivable follow-up", description: "Follow up on overdue invoices up to 5 times.", actionType: "FOLLOW_UP_RECEIVABLE", decision: "ALLOW", maxContacts: 5 },
-  { name: "Always allow escalation", description: "Escalating to a human is never blocked.", actionType: "ESCALATE_HUMAN", decision: "ALLOW" },
-  { name: "Always allow stop", description: "Stopping recovery is never blocked.", actionType: "STOP_RECOVERY", decision: "ALLOW" },
-];
 
 // Resolves to backend/data/synthetic regardless of execution directory
 const DATA_DIR = path.resolve(__dirname, "../data/synthetic");
@@ -188,6 +164,7 @@ async function main() {
         maxRetries: policy.maxRetries ?? null,
         maxContacts: policy.maxContacts ?? null,
         maxAmount: policy.maxAmount ?? null,
+        retryIntervalMinutes: policy.retryIntervalMinutes ?? null,
         enabled: true,
       })),
     ),

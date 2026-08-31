@@ -27,6 +27,7 @@ describe('RazorpayWebhookService', () => {
     },
     customer: {
       upsert: jest.fn(),
+      findUnique: jest.fn(),
     },
     paymentEvent: {
       create: jest.fn(),
@@ -51,6 +52,9 @@ describe('RazorpayWebhookService', () => {
     subscription: {
       update: jest.fn(),
     },
+    mandate: {
+      update: jest.fn(),
+    },
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
       callback(prisma),
     ),
@@ -61,6 +65,8 @@ describe('RazorpayWebhookService', () => {
     getOrder: jest.fn(),
     findInternalOrderByExternalId: jest.fn().mockResolvedValue(null),
     findInternalSubscriptionByExternalId: jest.fn().mockResolvedValue(null),
+    findInternalMandateByRegistrationOrderId: jest.fn().mockResolvedValue(null),
+    findInternalMandateByExternalId: jest.fn().mockResolvedValue(null),
   } as unknown as RazorpayService;
 
   const paymentsService = {
@@ -70,6 +76,7 @@ describe('RazorpayWebhookService', () => {
   const riskService = {
     assessPayment: jest.fn(),
     assessSubscriptionFailure: jest.fn(),
+    assessMandateFailure: jest.fn(),
   } as unknown as RiskService;
 
   const auditService = {
@@ -208,6 +215,43 @@ describe('RazorpayWebhookService', () => {
         paymentId: 'payment-1',
         recoveryCaseId: 'case-1',
       }),
+    );
+  });
+
+  it('trusts an order-linked customerId (e.g. a mandate debit) instead of re-deriving one from contact/email', async () => {
+    (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(true);
+    (prisma.payment.findUnique as jest.Mock).mockResolvedValue(null);
+    (
+      razorpayService.findInternalOrderByExternalId as jest.Mock
+    ).mockResolvedValue({
+      id: 'internal-order-1',
+      customerId: 'customer-known',
+    });
+    (prisma.customer.findUnique as jest.Mock).mockResolvedValue({
+      id: 'customer-known',
+      razorpayCustomerId: 'cust_alreadyKnown',
+    });
+    (paymentsService.create as jest.Mock).mockResolvedValue({
+      id: 'payment-mandate-1',
+    });
+    (prisma.paymentEvent.create as jest.Mock).mockResolvedValue({});
+    (riskService.assessPayment as jest.Mock).mockResolvedValue({
+      id: 'case-mandate-debit',
+      riskLevel: 'LOW',
+    });
+
+    await service.handleWebhook(
+      signedBody(validPayload),
+      'valid-signature',
+      'evt-mandate-debit',
+    );
+
+    expect(prisma.customer.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'customer-known' } }),
+    );
+    expect(prisma.customer.upsert).not.toHaveBeenCalled();
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'customer-known' }),
     );
   });
 
@@ -763,6 +807,200 @@ describe('RazorpayWebhookService', () => {
           processed: true,
           recoveryCaseId: 'case-sub-1',
         }),
+      );
+    });
+  });
+
+  describe('mandate webhooks', () => {
+    it('token.confirmed activates the mandate and records the token id', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalMandateByRegistrationOrderId as jest.Mock
+      ).mockResolvedValue({
+        id: 'mandate-1',
+        merchantId: 'merchant-1',
+        status: 'CREATED',
+      });
+
+      const payload = {
+        event: 'token.confirmed',
+        payload: {
+          token: { entity: { id: 'token_test123' } },
+          payment: { entity: { id: 'pay_auth1', order_id: 'order_reg1' } },
+        },
+      };
+
+      const result = await service.handleWebhook(
+        signedBody(payload),
+        'valid-signature',
+        'evt-token-confirmed',
+      );
+
+      expect(
+        razorpayService.findInternalMandateByRegistrationOrderId,
+      ).toHaveBeenCalledWith('order_reg1');
+      expect(prisma.mandate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'mandate-1' },
+          data: { status: 'CONFIRMED', externalId: 'token_test123' },
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          mandateId: 'mandate-1',
+        }),
+      );
+    });
+
+    it('token.rejected marks the mandate rejected and opens a case', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalMandateByRegistrationOrderId as jest.Mock
+      ).mockResolvedValue({ id: 'mandate-2', merchantId: 'merchant-1' });
+      (riskService.assessMandateFailure as jest.Mock).mockResolvedValue({
+        id: 'case-mandate-2',
+      });
+
+      const payload = {
+        event: 'token.rejected',
+        payload: {
+          payment: { entity: { id: 'pay_auth2', order_id: 'order_reg2' } },
+        },
+      };
+
+      const result = await service.handleWebhook(
+        signedBody(payload),
+        'valid-signature',
+        'evt-token-rejected',
+      );
+
+      expect(prisma.mandate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'mandate-2' },
+          data: { status: 'REJECTED' },
+        }),
+      );
+      expect(riskService.assessMandateFailure).toHaveBeenCalledWith(
+        'mandate-2',
+        'MANDATE_REGISTRATION_REJECTED',
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          recoveryCaseId: 'case-mandate-2',
+        }),
+      );
+    });
+
+    it('token.paused marks the mandate paused and opens a case', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalMandateByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'mandate-3', merchantId: 'merchant-1' });
+      (riskService.assessMandateFailure as jest.Mock).mockResolvedValue({
+        id: 'case-mandate-3',
+      });
+
+      const payload = {
+        event: 'token.paused',
+        payload: { token: { entity: { id: 'token_test456' } } },
+      };
+
+      const result = await service.handleWebhook(
+        signedBody(payload),
+        'valid-signature',
+        'evt-token-paused',
+      );
+
+      expect(prisma.mandate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'mandate-3' },
+          data: { status: 'PAUSED' },
+        }),
+      );
+      expect(riskService.assessMandateFailure).toHaveBeenCalledWith(
+        'mandate-3',
+        'MANDATE_PAUSED',
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          recoveryCaseId: 'case-mandate-3',
+        }),
+      );
+    });
+
+    it('token.cancelled marks the mandate cancelled and opens a case', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalMandateByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'mandate-4', merchantId: 'merchant-1' });
+      (riskService.assessMandateFailure as jest.Mock).mockResolvedValue({
+        id: 'case-mandate-4',
+      });
+
+      const payload = {
+        event: 'token.cancelled',
+        payload: { token: { entity: { id: 'token_test789' } } },
+      };
+
+      const result = await service.handleWebhook(
+        signedBody(payload),
+        'valid-signature',
+        'evt-token-cancelled',
+      );
+
+      expect(prisma.mandate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'mandate-4' },
+          data: { status: 'CANCELLED' },
+        }),
+      );
+      expect(riskService.assessMandateFailure).toHaveBeenCalledWith(
+        'mandate-4',
+        'MANDATE_CANCELLED',
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          recoveryCaseId: 'case-mandate-4',
+        }),
+      );
+    });
+
+    it('acknowledges without processing an unrecognized token', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalMandateByExternalId as jest.Mock
+      ).mockResolvedValue(null);
+
+      const result = await service.handleWebhook(
+        signedBody({
+          event: 'token.paused',
+          payload: { token: { entity: { id: 'token_unknown' } } },
+        }),
+        'valid-signature',
+        'evt-token-unknown',
+      );
+
+      expect(prisma.mandate.update).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({ received: true, processed: false }),
       );
     });
   });

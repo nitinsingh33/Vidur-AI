@@ -418,6 +418,38 @@ export function RecoveryCaseDetails() {
                 </dd>
               </div>
             </dl>
+          ) : recoveryCase.mandate ? (
+            <dl className="divide-y divide-border">
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Maximum per debit
+                </dt>
+                <dd className="text-sm font-semibold text-foreground">
+                  {formatAmount(
+                    recoveryCase.mandate.maxAmount,
+                    recoveryCase.mandate.currency,
+                  )}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Mandate status
+                </dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.mandate.status)}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">Method</dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {recoveryCase.mandate.method === 'upi'
+                    ? 'UPI Autopay'
+                    : 'eNACH'}
+                </dd>
+              </div>
+            </dl>
           ) : (
             <p className="p-5 text-sm text-muted-foreground">
               No payment information available.

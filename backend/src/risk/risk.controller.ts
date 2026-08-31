@@ -59,4 +59,17 @@ export class RiskController {
       request.user.merchantId,
     );
   }
+
+  @Post('assess-mandate/:mandateId')
+  assessMandateFailure(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('mandateId', new ParseUUIDPipe())
+    mandateId: string,
+  ) {
+    return this.riskService.assessMandateFailure(
+      mandateId,
+      'MANDATE_PAUSED',
+      request.user.merchantId,
+    );
+  }
 }

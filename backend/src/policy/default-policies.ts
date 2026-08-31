@@ -8,6 +8,8 @@ export interface DefaultPolicy {
   maxRetries?: number;
   maxContacts?: number;
   maxAmount?: number;
+  /** Minimum minutes between retries of this action type. Merchant-editable. */
+  retryIntervalMinutes?: number;
 }
 
 /**
@@ -15,14 +17,21 @@ export interface DefaultPolicy {
  * PolicyService.check() never falls into its "no policy configured;
  * blocking by default" branch for a brand-new account. Mirrors the
  * synthetic-data seed's defaults in prisma/seed.ts.
+ *
+ * Every numeric limit here (retry count, retry interval, contact caps,
+ * amount caps) is a starting default the merchant can edit or disable from
+ * the Policies page at any time — none of it is a fixed provider or
+ * regulatory requirement.
  */
 export const DEFAULT_POLICIES: DefaultPolicy[] = [
   {
     name: 'Allow payment retry',
-    description: 'Retry failed payments up to 3 times.',
+    description:
+      'Retry failed payments up to 3 times, at least 24 hours apart. Both numbers are editable defaults, not a fixed rule.',
     actionType: RecoveryActionType.RETRY_PAYMENT,
     decision: PolicyAction.ALLOW,
     maxRetries: 3,
+    retryIntervalMinutes: 1440,
   },
   {
     name: 'Allow payment link',

@@ -58,6 +58,14 @@ enum SubscriptionStatus {
   PAYMENT_FAILED
 }
 
+enum MandateStatus {
+  CREATED
+  CONFIRMED
+  REJECTED
+  PAUSED
+  CANCELLED
+}
+
 enum InvoiceStatus {
   DRAFT
   ISSUED
@@ -129,6 +137,7 @@ model Merchant {
   orders         Order[]
   payments       Payment[]
   subscriptions  Subscription[]
+  mandates       Mandate[]
   invoices       Invoice[]
   recoveryCases  RecoveryCase[]
   recoveryBatches RecoveryBatch[]
@@ -155,6 +164,11 @@ model Customer {
   id         String    @id @default(uuid())
   merchantId String
   externalId String?
+  /// Razorpay customer id (cust_...). Required by the recurring-payments
+  /// (mandate) APIs, which key everything off a Razorpay customer rather
+  /// than an order/payment's notes. Created lazily on first mandate
+  /// registration for this customer, not at Customer-creation time.
+  razorpayCustomerId String?
   name       String
   email      String?
   phone      String?
@@ -166,6 +180,7 @@ model Customer {
   orders        Order[]
   payments      Payment[]
   subscriptions Subscription[]
+  mandates      Mandate[]
   recoveryCases RecoveryCase[]
 
   @@unique([merchantId, externalId])
@@ -181,6 +196,12 @@ model Order {
   /// /razorpay/checkout. Lets webhooks (payment.failed, payment.captured,
   /// order.paid) find their way back to this internal Order row.
   externalId String?
+  /// Set when this order is a mandate debit attempt (registration or a
+  /// recurring re-presentment) rather than a one-off checkout order — lets
+  /// a failed Payment on this order be traced back to the Mandate that
+  /// authorized it, so RecoveryService knows to retry it headlessly via the
+  /// stored token instead of sending a payment link.
+  mandateId  String?
   amount     Decimal     @db.Decimal(18, 2)
   currency   String      @default("INR")
   status     OrderStatus @default(CREATED)
@@ -189,11 +210,13 @@ model Order {
 
   merchant Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  mandate  Mandate?  @relation(fields: [mandateId], references: [id], onDelete: SetNull)
   payments Payment[]
   recoveryCases RecoveryCase[]
 
   @@unique([merchantId, externalId])
   @@index([merchantId])
+  @@index([mandateId])
   @@index([customerId])
   @@index([status])
   @@index([externalId])
@@ -269,6 +292,50 @@ model Subscription {
   @@index([externalId])
 }
 
+model Mandate {
+  id         String        @id @default(uuid())
+  merchantId String
+  customerId String
+  /// Razorpay token id (token_...), set once token.confirmed fires —
+  /// this is what future recurring debits are charged against.
+  externalId String?
+  /// Razorpay order id used for the original authorization payment. Known
+  /// immediately at registration time (before the token exists), so
+  /// token.confirmed/rejected webhooks — which carry no merchant JWT — can
+  /// correlate back to this row via the authorization payment's order id.
+  registrationOrderId String
+  /// Razorpay payment method used for authorization: 'upi' (UPI Autopay)
+  /// or 'emandate' (NACH/net-banking-authorized recurring debit).
+  method     String        @default("upi")
+  maxAmount  Decimal       @db.Decimal(18, 2)
+  currency   String        @default("INR")
+  frequency  String        @default("monthly")
+  status     MandateStatus @default(CREATED)
+  expireAt   DateTime?
+  /// Consecutive failed re-presentments since the last successful debit —
+  /// resets to 0 on a successful charge. Distinct from RecoveryAction
+  /// attempt counts: this drives the NPCI-style retry ceiling, not the
+  /// generic per-case action limit.
+  failedDebitCount Int      @default(0)
+  /// When the last debit (registration or retry) was actually attempted —
+  /// enforces a minimum gap between re-presentments, since Razorpay (unlike
+  /// Subscriptions) does not auto-retry a failed mandate debit itself.
+  lastAttemptAt    DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders        Order[]
+  recoveryCases RecoveryCase[]
+
+  @@unique([merchantId, externalId])
+  @@index([merchantId])
+  @@index([customerId])
+  @@index([status])
+  @@index([registrationOrderId])
+}
+
 model Invoice {
   id         String        @id @default(uuid())
   merchantId String
@@ -299,6 +366,7 @@ model RecoveryCase {
   invoiceId           String?
   orderId             String?
   subscriptionId      String?
+  mandateId           String?
   batchId             String?
   status              RecoveryCaseStatus @default(OPEN)
   riskLevel           RiskLevel?
@@ -317,6 +385,7 @@ model RecoveryCase {
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
   subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  mandate      Mandate?       @relation(fields: [mandateId], references: [id], onDelete: SetNull)
   batch        RecoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   actions   RecoveryAction[]
@@ -329,6 +398,7 @@ model RecoveryCase {
   @@index([paymentId])
   @@index([orderId])
   @@index([subscriptionId])
+  @@index([mandateId])
   @@index([status])
   @@index([riskLevel])
 }
@@ -396,6 +466,10 @@ model Policy {
   maxRetries  Int?
   maxContacts Int?
   maxAmount   Decimal?           @db.Decimal(18, 2)
+  /// Merchant-configurable minimum gap, in minutes, before this action type
+  /// may be retried again — a plain policy setting, not a fixed provider or
+  /// regulatory rule. Null means no minimum gap is enforced.
+  retryIntervalMinutes Int?
   enabled     Boolean            @default(true)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt

@@ -81,6 +81,14 @@ const SUBSCRIPTION_STATUS_TONE: Record<string, Tone> = {
   PAYMENT_FAILED: 'rose',
 }
 
+const MANDATE_STATUS_TONE: Record<string, Tone> = {
+  CREATED: 'sky',
+  CONFIRMED: 'emerald',
+  REJECTED: 'rose',
+  PAUSED: 'amber',
+  CANCELLED: 'neutral',
+}
+
 export function toneClasses(tone: Tone) {
   return TONE_CLASSES[tone]
 }
@@ -111,4 +119,8 @@ export function invoiceStatusTone(status: string): Tone {
 
 export function subscriptionStatusTone(status: string): Tone {
   return SUBSCRIPTION_STATUS_TONE[status] ?? 'neutral'
+}
+
+export function mandateStatusTone(status: string): Tone {
+  return MANDATE_STATUS_TONE[status] ?? 'neutral'
 }

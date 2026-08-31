@@ -375,4 +375,83 @@ export class RiskService {
 
     return recoveryCase;
   }
+
+  /**
+   * Mandate-level failure: the mandate itself needs attention (registration
+   * rejected, customer paused it, or it was cancelled) rather than a single
+   * debit having failed. There's no Payment behind this — a rejected/paused/
+   * cancelled mandate means no debit was even attempted — so the case opens
+   * directly from the Mandate, parameterized by which of the three states
+   * triggered it.
+   */
+  async assessMandateFailure(
+    mandateId: string,
+    rootCause:
+      'MANDATE_REGISTRATION_REJECTED' | 'MANDATE_PAUSED' | 'MANDATE_CANCELLED',
+    merchantId?: string,
+  ) {
+    const mandate = await this.prisma.mandate.findUnique({
+      where: { id: mandateId },
+    });
+
+    if (!mandate || (merchantId && mandate.merchantId !== merchantId)) {
+      throw new NotFoundException(`Mandate ${mandateId} not found.`);
+    }
+
+    const existingCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        mandateId: mandate.id,
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+      },
+    });
+
+    if (existingCase) {
+      return existingCase;
+    }
+
+    const { successfulPaymentCount, failedPaymentCount } =
+      await this.getCustomerPaymentStats(mandate.customerId);
+
+    const assessment = this.riskEngine.assess({
+      amount: Number(mandate.maxAmount),
+      attemptNumber: mandate.failedDebitCount + 1,
+      successfulPaymentCount,
+      failedPaymentCount,
+    });
+
+    const recoveryCase = await this.prisma.recoveryCase.create({
+      data: {
+        merchantId: mandate.merchantId,
+        customerId: mandate.customerId,
+        mandateId: mandate.id,
+        status: RecoveryCaseStatus.ELIGIBLE,
+        riskLevel: assessment.riskLevel,
+        revenueAtRisk: assessment.revenueAtRisk,
+        recoveryProbability: assessment.recoveryProbability,
+        rootCause,
+      },
+      include: {
+        customer: true,
+        mandate: true,
+        actions: true,
+        outcome: true,
+      },
+    });
+
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'RECOVERY_CASE_OPENED',
+      actorType: 'SYSTEM',
+      details: {
+        mandateId: mandate.id,
+        rootCause: recoveryCase.rootCause,
+        riskLevel: recoveryCase.riskLevel,
+        revenueAtRisk: assessment.revenueAtRisk,
+        recoveryProbability: assessment.recoveryProbability,
+      },
+    });
+
+    return recoveryCase;
+  }
 }
