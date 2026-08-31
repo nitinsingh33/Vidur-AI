@@ -9,14 +9,9 @@ export class RecoveryQueueService {
     private readonly recoveryQueue: Queue,
   ) {}
 
-  async addRecoveryJob(
-    recoveryCaseId: string,
-  ) {
-    return this.recoveryQueue.add(
-      'recover',
-      {
-        recoveryCaseId,
-      },
-    );
+  async addRecoveryJob(recoveryCaseId: string) {
+    return this.recoveryQueue.add('recover', {
+      recoveryCaseId,
+    });
   }
 }

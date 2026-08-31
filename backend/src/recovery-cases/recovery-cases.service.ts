@@ -45,6 +45,7 @@ export class RecoveryCasesService {
           payment: true,
           invoice: true,
           order: true,
+          subscription: true,
           actions: {
             orderBy: {
               createdAt: 'desc',
@@ -70,7 +71,7 @@ export class RecoveryCasesService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, merchantId?: string) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: {
         id,
@@ -92,6 +93,8 @@ export class RecoveryCasesService {
 
         order: true,
 
+        subscription: true,
+
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -102,7 +105,7 @@ export class RecoveryCasesService {
       },
     });
 
-    if (!recoveryCase) {
+    if (!recoveryCase || (merchantId && recoveryCase.merchantId !== merchantId)) {
       throw new NotFoundException(`Recovery case ${id} not found.`);
     }
 

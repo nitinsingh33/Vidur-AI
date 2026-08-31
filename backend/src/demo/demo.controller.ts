@@ -1,15 +1,6 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import {
-  AuthenticatedUser,
-  JwtAuthGuard,
-} from '../auth/jwt-auth.guard';
+import { AuthenticatedUser, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DemoModeGuard } from './demo-mode.guard';
 import { DemoService } from './demo.service';
 import { TriggerPaymentFailureDto } from './dto/trigger-payment-failure.dto';
@@ -30,10 +21,7 @@ export class DemoController {
     @Req() request: Request & { user: AuthenticatedUser },
     @Body() dto: TriggerPaymentFailureDto,
   ) {
-    return this.demoService.triggerPaymentFailure(
-      request.user.merchantId,
-      dto,
-    );
+    return this.demoService.triggerPaymentFailure(request.user.merchantId, dto);
   }
 
   @Post('reset')

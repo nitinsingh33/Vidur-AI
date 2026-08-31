@@ -37,7 +37,10 @@ export class RecoveryCasesController {
   }
 
   @Get(':id')
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.recoveryCasesService.findOne(id);
+  findOne(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.recoveryCasesService.findOne(id, request.user.merchantId);
   }
 }

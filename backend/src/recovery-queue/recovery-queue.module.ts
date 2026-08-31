@@ -9,10 +9,7 @@ import { RecoveryQueueProcessor } from './recovery-queue.processor';
       name: 'recovery',
     }),
   ],
-  providers: [
-    RecoveryQueueService,
-    RecoveryQueueProcessor,
-  ],
+  providers: [RecoveryQueueService, RecoveryQueueProcessor],
   exports: [RecoveryQueueService],
 })
 export class RecoveryQueueModule {}

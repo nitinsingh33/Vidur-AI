@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { RecoveryBatchesService } from './recovery-batches.service';
 import { DetectBatchDto } from './dto/detect-batch.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

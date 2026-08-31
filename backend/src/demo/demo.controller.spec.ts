@@ -5,10 +5,7 @@ import { DemoController } from './demo.controller';
 
 describe('DemoController', () => {
   it('is protected by JwtAuthGuard so unauthenticated requests cannot trigger or reset demo data', () => {
-    const guards = Reflect.getMetadata(
-      GUARDS_METADATA,
-      DemoController,
-    );
+    const guards = Reflect.getMetadata(GUARDS_METADATA, DemoController);
 
     expect(guards).toContain(JwtAuthGuard);
     expect(guards).toContain(DemoModeGuard);

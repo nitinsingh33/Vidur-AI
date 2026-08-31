@@ -44,9 +44,8 @@ export class AgentOrJwtGuard implements CanActivate {
     }
 
     try {
-      request.user = await this.jwtService.verifyAsync<AuthenticatedUser>(
-        token,
-      );
+      request.user =
+        await this.jwtService.verifyAsync<AuthenticatedUser>(token);
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired access token.');

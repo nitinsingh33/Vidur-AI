@@ -386,6 +386,38 @@ export function RecoveryCaseDetails() {
                 </dd>
               </div>
             </dl>
+          ) : recoveryCase.subscription ? (
+            <dl className="divide-y divide-border">
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Recurring amount
+                </dt>
+                <dd className="text-sm font-semibold text-foreground">
+                  {formatAmount(
+                    recoveryCase.subscription.amount,
+                    recoveryCase.subscription.currency,
+                  )}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Subscription status
+                </dt>
+                <dd className="text-sm font-medium text-foreground">
+                  {formatLabel(recoveryCase.subscription.status)}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between gap-5 px-5 py-3.5">
+                <dt className="text-xs text-muted-foreground">
+                  Failed charges
+                </dt>
+                <dd className="font-mono text-xs font-medium text-foreground">
+                  {recoveryCase.subscription.failedPaymentCount}
+                </dd>
+              </div>
+            </dl>
           ) : (
             <p className="p-5 text-sm text-muted-foreground">
               No payment information available.

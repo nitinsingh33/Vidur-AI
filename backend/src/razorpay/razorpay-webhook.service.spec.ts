@@ -9,6 +9,7 @@ import { RiskService } from '../risk/risk.service';
 import { AuditService } from '../audit/audit.service';
 import { RazorpayService } from './razorpay.service';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
+import { EscalationService } from '../escalation/escalation.service';
 
 function signedBody(payload: unknown) {
   return Buffer.from(JSON.stringify(payload));
@@ -47,6 +48,9 @@ describe('RazorpayWebhookService', () => {
     invoice: {
       update: jest.fn(),
     },
+    subscription: {
+      update: jest.fn(),
+    },
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
       callback(prisma),
     ),
@@ -56,6 +60,7 @@ describe('RazorpayWebhookService', () => {
     verifyWebhookSignature: jest.fn(),
     getOrder: jest.fn(),
     findInternalOrderByExternalId: jest.fn().mockResolvedValue(null),
+    findInternalSubscriptionByExternalId: jest.fn().mockResolvedValue(null),
   } as unknown as RazorpayService;
 
   const paymentsService = {
@@ -64,11 +69,16 @@ describe('RazorpayWebhookService', () => {
 
   const riskService = {
     assessPayment: jest.fn(),
+    assessSubscriptionFailure: jest.fn(),
   } as unknown as RiskService;
 
   const auditService = {
     record: jest.fn(),
   } as unknown as AuditService;
+
+  const escalationService = {
+    escalateRecoveryCase: jest.fn(),
+  } as unknown as EscalationService;
 
   const validPayload = {
     event: 'payment.failed',
@@ -97,6 +107,7 @@ describe('RazorpayWebhookService', () => {
       paymentsService,
       riskService,
       auditService,
+      escalationService,
     );
   });
 
@@ -612,6 +623,146 @@ describe('RazorpayWebhookService', () => {
       expect(paymentsService.create).not.toHaveBeenCalled();
       expect(result).toEqual(
         expect.objectContaining({ processed: false, duplicate: true }),
+      );
+    });
+  });
+
+  describe('subscription webhooks', () => {
+    const subscriptionPayload = (event: string) => ({
+      event,
+      payload: {
+        subscription: {
+          entity: {
+            id: 'sub_test123',
+            status: event === 'subscription.halted' ? 'halted' : 'pending',
+            current_end: 1_800_000_000,
+          },
+        },
+      },
+    });
+
+    it('subscription.pending opens a recovery case directly from the subscription', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalSubscriptionByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'subscription-1', merchantId: 'merchant-1' });
+      (prisma.subscription.update as jest.Mock).mockResolvedValue({
+        id: 'subscription-1',
+        failedPaymentCount: 1,
+      });
+      (riskService.assessSubscriptionFailure as jest.Mock).mockResolvedValue({
+        id: 'case-sub-1',
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(subscriptionPayload('subscription.pending')),
+        'valid-signature',
+        'evt-sub-pending',
+      );
+
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'subscription-1' },
+          data: expect.objectContaining({ status: 'PAYMENT_FAILED' }),
+        }),
+      );
+      expect(riskService.assessSubscriptionFailure).toHaveBeenCalledWith(
+        'subscription-1',
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          recoveryCaseId: 'case-sub-1',
+        }),
+      );
+    });
+
+    it('subscription.charged closes an open case and resets the subscription failure state', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalSubscriptionByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'subscription-1', merchantId: 'merchant-1' });
+      (prisma.recoveryCase.findFirst as jest.Mock).mockResolvedValue({
+        id: 'case-sub-1',
+      });
+      (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+        id: 'case-sub-1',
+        merchantId: 'merchant-1',
+        status: 'IN_PROGRESS',
+        outcome: null,
+        payment: null,
+        order: null,
+        invoice: null,
+        subscriptionId: 'subscription-1',
+        subscription: { amount: '999' },
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(subscriptionPayload('subscription.charged')),
+        'valid-signature',
+        'evt-sub-charged',
+      );
+
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'subscription-1' },
+          data: { status: 'ACTIVE', failedPaymentCount: 0 },
+        }),
+      );
+      expect(prisma.recoveryCase.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'case-sub-1' },
+          data: expect.objectContaining({ status: 'RECOVERED' }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ received: true, processed: true }),
+      );
+    });
+
+    it('subscription.halted escalates the case for human attention', async () => {
+      (razorpayService.verifyWebhookSignature as jest.Mock).mockReturnValue(
+        true,
+      );
+      (
+        razorpayService.findInternalSubscriptionByExternalId as jest.Mock
+      ).mockResolvedValue({ id: 'subscription-1', merchantId: 'merchant-1' });
+      (prisma.recoveryCase.findFirst as jest.Mock).mockResolvedValue({
+        id: 'case-sub-1',
+        status: 'IN_PROGRESS',
+      });
+      (prisma.recoveryCase.update as jest.Mock).mockResolvedValue({
+        id: 'case-sub-1',
+      });
+
+      const result = await service.handleWebhook(
+        signedBody(subscriptionPayload('subscription.halted')),
+        'valid-signature',
+        'evt-sub-halted',
+      );
+
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'subscription-1' },
+          data: { status: 'PAYMENT_FAILED' },
+        }),
+      );
+      expect(escalationService.escalateRecoveryCase).toHaveBeenCalledWith(
+        'case-sub-1',
+        expect.any(String),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          received: true,
+          processed: true,
+          recoveryCaseId: 'case-sub-1',
+        }),
       );
     });
   });

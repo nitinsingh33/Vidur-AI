@@ -75,6 +75,15 @@ export interface RecoveryCase {
     createdAt: string
   } | null
 
+  subscription?: {
+    id: string
+    amount: string
+    currency: string
+    status: string
+    failedPaymentCount: number
+    nextBillingAt: string | null
+  } | null
+
   actions: RecoveryAction[]
 
   outcome?: RecoveryOutcome | null

@@ -22,6 +22,7 @@ import { RecoveryCaseDetails } from './pages/RecoveryCaseDetails'
 import { RecoveryBatches } from './pages/RecoveryBatches'
 import { CheckoutDropOff } from './pages/CheckoutDropOff'
 import { Receivables } from './pages/Receivables'
+import { Subscriptions } from './pages/Subscriptions'
 import { AgentActivity } from './pages/AgentActivity'
 import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
@@ -78,6 +79,11 @@ function AppShell() {
               <Route
                 path="/receivables"
                 element={<Receivables />}
+              />
+
+              <Route
+                path="/subscriptions"
+                element={<Subscriptions />}
               />
 
               {/* Agent */}

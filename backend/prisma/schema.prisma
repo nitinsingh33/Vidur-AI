@@ -246,6 +246,10 @@ model Subscription {
   id                 String             @id @default(uuid())
   merchantId         String
   customerId         String
+  /// Razorpay subscription id (e.g. sub_...). Lets webhooks (subscription.
+  /// charged/pending/halted), which carry no merchant JWT, find their way
+  /// back to this internal Subscription row.
+  externalId         String?
   amount             Decimal            @db.Decimal(18, 2)
   currency           String             @default("INR")
   status             SubscriptionStatus @default(ACTIVE)
@@ -254,12 +258,15 @@ model Subscription {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  recoveryCases RecoveryCase[]
 
+  @@unique([merchantId, externalId])
   @@index([merchantId])
   @@index([customerId])
   @@index([status])
+  @@index([externalId])
 }
 
 model Invoice {
@@ -291,6 +298,7 @@ model RecoveryCase {
   paymentId           String?
   invoiceId           String?
   orderId             String?
+  subscriptionId      String?
   batchId             String?
   status              RecoveryCaseStatus @default(OPEN)
   riskLevel           RiskLevel?
@@ -303,12 +311,13 @@ model RecoveryCase {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  merchant Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  customer Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  payment  Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  invoice  Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  order    Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  batch    RecoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  payment      Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  batch        RecoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   actions   RecoveryAction[]
   outcome   RecoveryOutcome?
@@ -319,6 +328,7 @@ model RecoveryCase {
   @@index([batchId])
   @@index([paymentId])
   @@index([orderId])
+  @@index([subscriptionId])
   @@index([status])
   @@index([riskLevel])
 }

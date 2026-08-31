@@ -25,6 +25,15 @@ export interface RazorpayPaymentLink {
   currency: string;
 }
 
+export interface CreateSubscriptionResult {
+  id: string;
+  externalId: string;
+  shortUrl: string;
+  status: string;
+  amount: number;
+  currency: string;
+}
+
 @Injectable()
 export class RazorpayService {
   private readonly keyId = process.env.RAZORPAY_KEY_ID;
@@ -214,6 +223,123 @@ export class RazorpayService {
     }
 
     return (await response.json()) as RazorpayPaymentLink;
+  }
+
+  /**
+   * Creates a real Razorpay Test/Live Mode recurring Subscription: a Plan
+   * (the billing schedule) followed by a Subscription against it. Razorpay
+   * requires the customer to complete a one-time mandate authorization via
+   * `short_url` (like a Payment Link) before recurring charges begin — only
+   * after that do subscription.charged/pending/halted webhooks fire for
+   * this subscription. Persists an internal Subscription row (externalId =
+   * the Razorpay subscription id) so those webhooks can find their way back
+   * here without a merchant JWT.
+   */
+  async createSubscription(params: {
+    merchantId: string;
+    customerId: string;
+    amount: number;
+    currency?: string;
+    period?: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    totalCount?: number;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+  }): Promise<CreateSubscriptionResult> {
+    const planResponse = await fetch('https://api.razorpay.com/v1/plans', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${this.basicAuthHeader()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        period: params.period ?? 'monthly',
+        interval: 1,
+        item: {
+          name: `Vidur AI subscription — ${params.customerName ?? 'customer'}`,
+          amount: Math.round(params.amount * 100),
+          currency: params.currency ?? 'INR',
+        },
+      }),
+    });
+
+    if (!planResponse.ok) {
+      const errorBody = await planResponse.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay plan creation failed: ${errorBody}`,
+      );
+    }
+
+    const plan = (await planResponse.json()) as { id: string };
+
+    const subscriptionResponse = await fetch(
+      'https://api.razorpay.com/v1/subscriptions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${this.basicAuthHeader()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan_id: plan.id,
+          total_count: params.totalCount ?? 12,
+          customer_notify: 1,
+          notes: {
+            merchantId: params.merchantId,
+            customerId: params.customerId,
+          },
+        }),
+      },
+    );
+
+    if (!subscriptionResponse.ok) {
+      const errorBody = await subscriptionResponse.text();
+
+      throw new InternalServerErrorException(
+        `Razorpay subscription creation failed: ${errorBody}`,
+      );
+    }
+
+    const subscription = (await subscriptionResponse.json()) as {
+      id: string;
+      status: string;
+      short_url: string;
+    };
+
+    const record = await this.prisma.subscription.create({
+      data: {
+        merchantId: params.merchantId,
+        customerId: params.customerId,
+        externalId: subscription.id,
+        amount: params.amount,
+        currency: params.currency ?? 'INR',
+        status: 'ACTIVE',
+      },
+    });
+
+    return {
+      id: record.id,
+      externalId: subscription.id,
+      shortUrl: subscription.short_url,
+      status: subscription.status,
+      amount: params.amount,
+      currency: params.currency ?? 'INR',
+    };
+  }
+
+  /**
+   * Internal Subscription row for a Razorpay subscription id. Unlike
+   * findInternalOrderByExternalId, this doesn't require merchantId up
+   * front — subscription webhooks (charged/pending/halted) carry no
+   * merchant JWT and no order/payment notes to resolve one from, so the
+   * Subscription row itself (already merchant-scoped at creation time) is
+   * the only way to learn which merchant this event belongs to.
+   */
+  findInternalSubscriptionByExternalId(razorpaySubscriptionId: string) {
+    return this.prisma.subscription.findFirst({
+      where: { externalId: razorpaySubscriptionId },
+    });
   }
 
   /**

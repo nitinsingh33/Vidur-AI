@@ -22,9 +22,7 @@ describe('DemoModeGuard', () => {
     process.env.NODE_ENV = 'production';
     process.env.DEMO_MODE = undefined;
 
-    expect(() => guard.canActivate({} as any)).toThrow(
-      ForbiddenException,
-    );
+    expect(() => guard.canActivate({} as any)).toThrow(ForbiddenException);
   });
 
   it('allows demo requests in production when DEMO_MODE=true is set for a live judged demo', () => {

@@ -69,49 +69,45 @@ export class AnalyticsService {
       RecoveryCaseStatus.ESCALATED,
     ];
 
-    const [
-      activeRecoveryCases,
-      agentActions,
-      failedActions,
-      escalations,
-    ] = await Promise.all([
-      this.prisma.recoveryCase.count({
-        where: {
-          ...(merchantId && { merchantId }),
-          status: {
-            in: activeStatuses,
+    const [activeRecoveryCases, agentActions, failedActions, escalations] =
+      await Promise.all([
+        this.prisma.recoveryCase.count({
+          where: {
+            ...(merchantId && { merchantId }),
+            status: {
+              in: activeStatuses,
+            },
           },
-        },
-      }),
+        }),
 
-      this.prisma.recoveryAction.count({
-        where: {
-          ...(merchantId && {
-            recoveryCase: {
-              merchantId,
-            },
-          }),
-        },
-      }),
+        this.prisma.recoveryAction.count({
+          where: {
+            ...(merchantId && {
+              recoveryCase: {
+                merchantId,
+              },
+            }),
+          },
+        }),
 
-      this.prisma.recoveryAction.count({
-        where: {
-          status: 'FAILED',
-          ...(merchantId && {
-            recoveryCase: {
-              merchantId,
-            },
-          }),
-        },
-      }),
+        this.prisma.recoveryAction.count({
+          where: {
+            status: 'FAILED',
+            ...(merchantId && {
+              recoveryCase: {
+                merchantId,
+              },
+            }),
+          },
+        }),
 
-      this.prisma.recoveryCase.count({
-        where: {
-          status: RecoveryCaseStatus.ESCALATED,
-          ...(merchantId && { merchantId }),
-        },
-      }),
-    ]);
+        this.prisma.recoveryCase.count({
+          where: {
+            status: RecoveryCaseStatus.ESCALATED,
+            ...(merchantId && { merchantId }),
+          },
+        }),
+      ]);
 
     return {
       activeRecoveryCases,
@@ -120,5 +116,4 @@ export class AnalyticsService {
       escalations,
     };
   }
-
 }

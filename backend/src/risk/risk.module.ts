@@ -7,13 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [AuthModule],
   controllers: [RiskController],
-  providers: [
-    RiskEngineService,
-    RiskService,
-  ],
-  exports: [
-    RiskEngineService,
-    RiskService,
-  ],
+  providers: [RiskEngineService, RiskService],
+  exports: [RiskEngineService, RiskService],
 })
 export class RiskModule {}

@@ -298,4 +298,81 @@ export class RiskService {
 
     return recoveryCase;
   }
+
+  /**
+   * Failed subscription charge: Razorpay attempted to auto-charge the
+   * customer's saved payment method for a billing cycle and it failed
+   * (subscription.pending webhook). There's no Payment/Order/Invoice row
+   * for this cycle — Razorpay's recurring engine attempts the charge
+   * itself, outside any Vidur-initiated flow — so the case is opened
+   * directly from the Subscription.
+   */
+  async assessSubscriptionFailure(subscriptionId: string, merchantId?: string) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+
+    if (
+      !subscription ||
+      (merchantId && subscription.merchantId !== merchantId)
+    ) {
+      throw new NotFoundException(`Subscription ${subscriptionId} not found.`);
+    }
+
+    const existingCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+      },
+    });
+
+    if (existingCase) {
+      return existingCase;
+    }
+
+    const { successfulPaymentCount, failedPaymentCount } =
+      await this.getCustomerPaymentStats(subscription.customerId);
+
+    const assessment = this.riskEngine.assess({
+      amount: Number(subscription.amount),
+      attemptNumber: subscription.failedPaymentCount + 1,
+      successfulPaymentCount,
+      failedPaymentCount,
+    });
+
+    const recoveryCase = await this.prisma.recoveryCase.create({
+      data: {
+        merchantId: subscription.merchantId,
+        customerId: subscription.customerId,
+        subscriptionId: subscription.id,
+        status: RecoveryCaseStatus.ELIGIBLE,
+        riskLevel: assessment.riskLevel,
+        revenueAtRisk: assessment.revenueAtRisk,
+        recoveryProbability: assessment.recoveryProbability,
+        rootCause: 'SUBSCRIPTION_PAYMENT_FAILED',
+      },
+      include: {
+        customer: true,
+        subscription: true,
+        actions: true,
+        outcome: true,
+      },
+    });
+
+    await this.auditService.record({
+      merchantId: recoveryCase.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'RECOVERY_CASE_OPENED',
+      actorType: 'SYSTEM',
+      details: {
+        subscriptionId: subscription.id,
+        rootCause: recoveryCase.rootCause,
+        riskLevel: recoveryCase.riskLevel,
+        revenueAtRisk: assessment.revenueAtRisk,
+        recoveryProbability: assessment.recoveryProbability,
+      },
+    });
+
+    return recoveryCase;
+  }
 }

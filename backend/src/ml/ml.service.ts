@@ -25,21 +25,16 @@ export class MlService {
     input: RecoveryPredictionInput,
   ): Promise<RecoveryPredictionResponse> {
     try {
-      const response = await fetch(
-        `${this.mlServiceUrl}/predict-recovery`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(input),
+      const response = await fetch(`${this.mlServiceUrl}/predict-recovery`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify(input),
+      });
 
       if (!response.ok) {
-        throw new Error(
-          `ML service returned HTTP ${response.status}`,
-        );
+        throw new Error(`ML service returned HTTP ${response.status}`);
       }
 
       return (await response.json()) as RecoveryPredictionResponse;

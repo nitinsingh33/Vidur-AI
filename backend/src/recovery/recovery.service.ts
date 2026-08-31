@@ -69,6 +69,7 @@ export class RecoveryService {
         },
         invoice: true,
         order: true,
+        subscription: true,
         actions: true,
         outcome: true,
       },
@@ -251,6 +252,7 @@ export class RecoveryService {
         customer: true,
         order: true,
         invoice: true,
+        subscription: true,
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -340,7 +342,8 @@ export class RecoveryService {
     if (
       !recoveryCase.payment &&
       !recoveryCase.orderId &&
-      !recoveryCase.invoiceId
+      !recoveryCase.invoiceId &&
+      !recoveryCase.subscriptionId
     ) {
       throw new NotFoundException(
         `Recovery case ${recoveryCaseId} has nothing to execute against.`,
@@ -561,6 +564,7 @@ export class RecoveryService {
       payment: { amount: unknown } | null;
       order: { amount: unknown } | null;
       invoice: { amount: unknown } | null;
+      subscription: { amount: unknown } | null;
     },
     action: { type: RecoveryActionType },
   ) {
@@ -582,6 +586,7 @@ export class RecoveryService {
       recoveryCase.payment?.amount ??
         recoveryCase.order?.amount ??
         recoveryCase.invoice?.amount ??
+        recoveryCase.subscription?.amount ??
         0,
     );
 
@@ -626,6 +631,7 @@ export class RecoveryService {
       include: {
         payment: true,
         invoice: true,
+        subscription: true,
         actions: {
           orderBy: {
             createdAt: 'desc',
@@ -644,7 +650,8 @@ export class RecoveryService {
     if (
       !recoveryCase.payment &&
       !recoveryCase.orderId &&
-      !recoveryCase.invoiceId
+      !recoveryCase.invoiceId &&
+      !recoveryCase.subscriptionId
     ) {
       throw new NotFoundException(
         `Recovery case ${recoveryCaseId} has nothing to observe.`,

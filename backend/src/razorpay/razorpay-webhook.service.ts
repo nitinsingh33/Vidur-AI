@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RiskService } from '../risk/risk.service';
 import { RazorpayService } from './razorpay.service';
+import { EscalationService } from '../escalation/escalation.service';
 import { ACTIVE_RECOVERY_CASE_STATUSES } from '../recovery/recovery-case-status.util';
 
 interface RazorpayPaymentEntity {
@@ -50,6 +51,13 @@ interface RazorpayOrderEntity {
   notes?: Record<string, string>;
 }
 
+interface RazorpaySubscriptionEntity {
+  id: string;
+  status?: string;
+  current_end?: number;
+  notes?: Record<string, string>;
+}
+
 interface RazorpayWebhookPayload {
   event: string;
   payload?: {
@@ -61,6 +69,9 @@ interface RazorpayWebhookPayload {
     };
     order?: {
       entity?: RazorpayOrderEntity;
+    };
+    subscription?: {
+      entity?: RazorpaySubscriptionEntity;
     };
   };
 }
@@ -88,6 +99,16 @@ const METHOD_MAP: Record<string, PaymentMethod> = {
  *    arrived.
  *  - `order.paid` is a defensive, order-level confirmation of the same
  *    fact, in case `payment.captured` was missed or arrives out of order.
+ *  - `subscription.charged` confirms a recurring billing cycle succeeded —
+ *    closes any open recovery case for that subscription and resets its
+ *    failure count, or is a no-op for a routine (non-recovery) renewal.
+ *  - `subscription.pending` is Razorpay's real signal that a recurring
+ *    charge attempt failed and is now in its own automatic retry window;
+ *    opens a recovery case directly from the Subscription (there's no
+ *    Payment/Order/Invoice row for a cycle Razorpay charges automatically).
+ *  - `subscription.halted` fires once Razorpay's own retries are exhausted
+ *    — escalates the case for human attention rather than leaving it to
+ *    keep silently failing.
  * Everything else is acknowledged (2xx) but not processed.
  */
 @Injectable()
@@ -100,6 +121,7 @@ export class RazorpayWebhookService {
     private readonly paymentsService: PaymentsService,
     private readonly riskService: RiskService,
     private readonly auditService: AuditService,
+    private readonly escalationService: EscalationService,
   ) {}
 
   async handleWebhook(
@@ -149,13 +171,26 @@ export class RazorpayWebhookService {
       return this.handleOrderPaid(payload, eventId);
     }
 
+    if (event === 'subscription.charged') {
+      return this.handleSubscriptionCharged(payload, eventId);
+    }
+
+    if (event === 'subscription.pending') {
+      return this.handleSubscriptionPending(payload, eventId);
+    }
+
+    if (event === 'subscription.halted') {
+      return this.handleSubscriptionHalted(payload, eventId);
+    }
+
     if (event !== 'payment.failed') {
       return {
         received: true,
         processed: false,
         event,
         reason:
-          'Event type not handled (payment.failed, payment.captured, payment_link.paid, order.paid only).',
+          'Event type not handled (payment.failed, payment.captured, payment_link.paid, order.paid, ' +
+          'subscription.charged, subscription.pending, subscription.halted only).',
       };
     }
 
@@ -679,6 +714,241 @@ export class RazorpayWebhookService {
     });
   }
 
+  /**
+   * A recurring billing cycle succeeded. If it closes out an open recovery
+   * case, closeRecoveryCase both records the outcome and resets the
+   * Subscription's failure state; a routine (non-recovery) renewal just
+   * refreshes the Subscription's billing state directly.
+   */
+  private async handleSubscriptionCharged(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const entity = payload.payload?.subscription?.entity;
+
+    if (!entity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing subscription entity.',
+      };
+    }
+
+    const subscription =
+      await this.razorpayService.findInternalSubscriptionByExternalId(
+        entity.id,
+      );
+
+    if (!subscription) {
+      this.logger.warn(
+        `subscription.charged webhook for unrecognized subscription ${entity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized subscription — not created by this system.',
+      };
+    }
+
+    const activeCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+      },
+    });
+
+    if (!activeCase) {
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          failedPaymentCount: 0,
+          ...(entity.current_end && {
+            nextBillingAt: new Date(entity.current_end * 1000),
+          }),
+        },
+      });
+
+      return {
+        received: true,
+        processed: true,
+        subscriptionId: subscription.id,
+        note: 'Routine successful charge; no open recovery case.',
+      };
+    }
+
+    const recoveryMethod = await this.resolveOriginatingActionType(
+      activeCase.id,
+    );
+
+    const result = await this.closeRecoveryCase(activeCase.id, {
+      recoveryMethod,
+      source: 'razorpay_subscription_charged',
+      eventId,
+    });
+
+    this.logger.log(
+      `subscription.charged for ${entity.id} -> case ${activeCase.id} ` +
+        `(${result.processed ? 'processed' : 'skipped/duplicate'}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return { ...result, subscriptionId: subscription.id };
+  }
+
+  /**
+   * A recurring charge attempt failed and Razorpay itself is now retrying
+   * it on its own schedule. This is the primary detection signal for
+   * subscription recovery — opens a case directly from the Subscription.
+   */
+  private async handleSubscriptionPending(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const entity = payload.payload?.subscription?.entity;
+
+    if (!entity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing subscription entity.',
+      };
+    }
+
+    const subscription =
+      await this.razorpayService.findInternalSubscriptionByExternalId(
+        entity.id,
+      );
+
+    if (!subscription) {
+      this.logger.warn(
+        `subscription.pending webhook for unrecognized subscription ${entity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized subscription — not created by this system.',
+      };
+    }
+
+    const updated = await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: 'PAYMENT_FAILED',
+        failedPaymentCount: { increment: 1 },
+      },
+    });
+
+    const recoveryCase = await this.riskService.assessSubscriptionFailure(
+      subscription.id,
+    );
+
+    this.logger.log(
+      `subscription.pending for ${entity.id} -> case ${recoveryCase.id} ` +
+        `(failedPaymentCount=${updated.failedPaymentCount}, eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    await this.auditService.record({
+      merchantId: subscription.merchantId,
+      recoveryCaseId: recoveryCase.id,
+      action: 'RAZORPAY_SUBSCRIPTION_PENDING_WEBHOOK',
+      actorType: 'SYSTEM',
+      details: {
+        razorpaySubscriptionId: entity.id,
+        eventId: eventId ?? null,
+        failedPaymentCount: updated.failedPaymentCount,
+      },
+    });
+
+    return {
+      received: true,
+      processed: true,
+      subscriptionId: subscription.id,
+      recoveryCaseId: recoveryCase.id,
+    };
+  }
+
+  /**
+   * Razorpay exhausted its own automatic retry schedule and halted the
+   * subscription — no further auto-charge attempts will happen. Escalates
+   * the case (opening one first if subscription.pending was somehow missed)
+   * rather than leaving it to keep silently failing.
+   */
+  private async handleSubscriptionHalted(
+    payload: RazorpayWebhookPayload,
+    eventId: string | undefined,
+  ) {
+    const entity = payload.payload?.subscription?.entity;
+
+    if (!entity?.id) {
+      return {
+        received: true,
+        processed: false,
+        reason: 'Malformed payload: missing subscription entity.',
+      };
+    }
+
+    const subscription =
+      await this.razorpayService.findInternalSubscriptionByExternalId(
+        entity.id,
+      );
+
+    if (!subscription) {
+      this.logger.warn(
+        `subscription.halted webhook for unrecognized subscription ${entity.id} ` +
+          `(eventId=${eventId ?? 'unknown'}); ignoring.`,
+      );
+      return {
+        received: true,
+        processed: false,
+        reason: 'Unrecognized subscription — not created by this system.',
+      };
+    }
+
+    await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { status: 'PAYMENT_FAILED' },
+    });
+
+    let recoveryCase = await this.prisma.recoveryCase.findFirst({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: ACTIVE_RECOVERY_CASE_STATUSES },
+      },
+    });
+
+    if (!recoveryCase) {
+      recoveryCase = await this.riskService.assessSubscriptionFailure(
+        subscription.id,
+      );
+    }
+
+    if (recoveryCase.status !== 'ESCALATED') {
+      await this.prisma.recoveryCase.update({
+        where: { id: recoveryCase.id },
+        data: { rootCause: 'SUBSCRIPTION_HALTED' },
+      });
+
+      await this.escalationService.escalateRecoveryCase(
+        recoveryCase.id,
+        'Razorpay halted this subscription after exhausting its own automatic retry schedule.',
+      );
+    }
+
+    this.logger.log(
+      `subscription.halted for ${entity.id} -> case ${recoveryCase.id} escalated ` +
+        `(eventId=${eventId ?? 'unknown'}).`,
+    );
+
+    return {
+      received: true,
+      processed: true,
+      subscriptionId: subscription.id,
+      recoveryCaseId: recoveryCase.id,
+    };
+  }
+
   /** Most recent action Vidur actually ran for this case — used to attribute recovered revenue. */
   private async resolveOriginatingActionType(
     recoveryCaseId: string,
@@ -712,7 +982,13 @@ export class RazorpayWebhookService {
   ) {
     const recoveryCase = await this.prisma.recoveryCase.findUnique({
       where: { id: recoveryCaseId },
-      include: { payment: true, order: true, invoice: true, outcome: true },
+      include: {
+        payment: true,
+        order: true,
+        invoice: true,
+        subscription: true,
+        outcome: true,
+      },
     });
 
     if (!recoveryCase) {
@@ -740,7 +1016,9 @@ export class RazorpayWebhookService {
       ? Number(recoveryCase.payment.amount)
       : recoveryCase.order
         ? Number(recoveryCase.order.amount)
-        : Number(recoveryCase.invoice?.amount ?? 0);
+        : recoveryCase.invoice
+          ? Number(recoveryCase.invoice.amount)
+          : Number(recoveryCase.subscription?.amount ?? 0);
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -799,6 +1077,11 @@ export class RazorpayWebhookService {
           await tx.invoice.update({
             where: { id: recoveryCase.invoiceId },
             data: { status: 'PAID', paidAt: new Date() },
+          });
+        } else if (recoveryCase.subscriptionId) {
+          await tx.subscription.update({
+            where: { id: recoveryCase.subscriptionId },
+            data: { status: 'ACTIVE', failedPaymentCount: 0 },
           });
         }
 

@@ -47,4 +47,16 @@ export class RiskController {
       request.user.merchantId,
     );
   }
+
+  @Post('assess-subscription/:subscriptionId')
+  assessSubscriptionFailure(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('subscriptionId', new ParseUUIDPipe())
+    subscriptionId: string,
+  ) {
+    return this.riskService.assessSubscriptionFailure(
+      subscriptionId,
+      request.user.merchantId,
+    );
+  }
 }
