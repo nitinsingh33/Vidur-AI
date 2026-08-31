@@ -903,6 +903,9 @@ describe('RazorpayWebhookService', () => {
         'mandate-2',
         'MANDATE_REGISTRATION_REJECTED',
       );
+      expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith(
+        'case-mandate-2',
+      );
       expect(result).toEqual(
         expect.objectContaining({
           received: true,
@@ -944,6 +947,9 @@ describe('RazorpayWebhookService', () => {
         'mandate-3',
         'MANDATE_PAUSED',
       );
+      expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith(
+        'case-mandate-3',
+      );
       expect(result).toEqual(
         expect.objectContaining({
           received: true,
@@ -984,6 +990,9 @@ describe('RazorpayWebhookService', () => {
       expect(riskService.assessMandateFailure).toHaveBeenCalledWith(
         'mandate-4',
         'MANDATE_CANCELLED',
+      );
+      expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith(
+        'case-mandate-4',
       );
       expect(result).toEqual(
         expect.objectContaining({

@@ -53,3 +53,50 @@ export function getAnalyticsSummary(token: string) {
     token,
   )
 }
+
+export interface PaymentHealthDay {
+  date: string
+  captured: number
+  failed: number
+  successRate: number | null
+}
+
+export interface PaymentHealthReason {
+  reason: string
+  count: number
+}
+
+export interface PaymentHealthMethod {
+  method: string
+  captured: number
+  failed: number
+  successRate: number | null
+}
+
+export interface PaymentHealthResponse {
+  windowDays: number
+  daily: PaymentHealthDay[]
+  failureReasons: PaymentHealthReason[]
+  byMethod: PaymentHealthMethod[]
+  currentWindowSuccessRate: number | null
+  previousWindowSuccessRate: number | null
+}
+
+export function getPaymentHealth(token: string, days = 30) {
+  return fetchJson<PaymentHealthResponse>(
+    `/analytics/payment-health?days=${days}`,
+    token,
+  )
+}
+
+export interface RecoveryFunnelResponse {
+  detected: number
+  inProgress: number
+  escalated: number
+  recovered: number
+  exhausted: number
+}
+
+export function getRecoveryFunnel(token: string) {
+  return fetchJson<RecoveryFunnelResponse>('/analytics/recovery-funnel', token)
+}

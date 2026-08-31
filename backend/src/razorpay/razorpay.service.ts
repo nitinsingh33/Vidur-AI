@@ -13,6 +13,10 @@ export interface RazorpayOrder {
 
 export interface CreateCheckoutOrderResult {
   orderId: string;
+  /** Internal Order row id — used by callers (e.g. the storefront) that need
+   *  to poll status or send an abandonment signal against this specific
+   *  checkout, as opposed to the Razorpay order id above. */
+  internalOrderId: string;
   amount: number;
   currency: string;
   keyId: string;
@@ -213,22 +217,30 @@ export class RazorpayService {
     merchantId: string;
     amount: number;
     customerName?: string;
+    /** Set for a storefront checkout with a known (guest) Customer row. */
+    customerId?: string;
+    /** Human-readable cart snapshot for a storefront checkout — display
+     *  only, never used to compute the charged amount. */
+    itemsSummary?: string;
   }): Promise<CreateCheckoutOrderResult> {
     const { keyId } = await this.resolveCredentials(params.merchantId);
     const order = await this.createOrder(params);
 
-    await this.prisma.order.create({
+    const internalOrder = await this.prisma.order.create({
       data: {
         merchantId: params.merchantId,
+        customerId: params.customerId,
         externalId: order.id,
         amount: params.amount,
         currency: order.currency,
+        itemsSummary: params.itemsSummary,
         status: 'CREATED',
       },
     });
 
     return {
       orderId: order.id,
+      internalOrderId: internalOrder.id,
       amount: order.amount,
       currency: order.currency,
       keyId,

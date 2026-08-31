@@ -52,8 +52,11 @@ describe('CheckoutSweepService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'CREATED',
-          createdAt: expect.objectContaining({ lte: expect.any(Date) }),
           payments: { none: {} },
+          OR: [
+            { createdAt: { lte: expect.any(Date) } },
+            { abandonSignalAt: { not: null } },
+          ],
         }),
       }),
     );
@@ -61,7 +64,7 @@ describe('CheckoutSweepService', () => {
     // The cutoff must be in the past, not "right now" — otherwise every
     // order ever created would be flagged instantly.
     const cutoff = (prisma.order.findMany as jest.Mock).mock.calls[0][0].where
-      .createdAt.lte as Date;
+      .OR[0].createdAt.lte as Date;
     expect(cutoff.getTime()).toBeLessThan(Date.now());
 
     expect(riskService.assessOrderAbandonment).toHaveBeenCalledTimes(2);

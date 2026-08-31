@@ -1176,6 +1176,15 @@ export class RazorpayWebhookService implements OnModuleInit {
       'MANDATE_REGISTRATION_REJECTED',
     );
 
+    /*
+     * A real token.rejected webhook, already signature-verified above,
+     * opens a real case — no merchant click required for what happens
+     * next. Fire-and-forget for the same reason every other automatic
+     * trigger point is: this webhook's HTTP response must not wait on the
+     * full strategy/policy/execute-or-escalate chain.
+     */
+    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
+
     await this.auditService.record({
       merchantId: mandate.merchantId,
       recoveryCaseId: recoveryCase.id,
@@ -1241,6 +1250,8 @@ export class RazorpayWebhookService implements OnModuleInit {
       'MANDATE_PAUSED',
     );
 
+    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
+
     await this.auditService.record({
       merchantId: mandate.merchantId,
       recoveryCaseId: recoveryCase.id,
@@ -1301,6 +1312,8 @@ export class RazorpayWebhookService implements OnModuleInit {
       mandate.id,
       'MANDATE_CANCELLED',
     );
+
+    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
 
     await this.auditService.record({
       merchantId: mandate.merchantId,

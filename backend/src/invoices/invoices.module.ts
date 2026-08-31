@@ -19,6 +19,6 @@ import { AuthModule } from '../auth/auth.module';
     InvoiceOverdueSweepService,
     InvoiceOverdueSweepProcessor,
   ],
-  exports: [InvoicesService],
+  exports: [InvoicesService, InvoiceOverdueSweepService],
 })
 export class InvoicesModule {}

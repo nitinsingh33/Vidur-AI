@@ -13,6 +13,9 @@ describe('RecoveryAutoOrchestratorService', () => {
     recoveryCase: {
       findUnique: jest.fn(),
     },
+    recoveryAction: {
+      deleteMany: jest.fn(),
+    },
   } as unknown as PrismaService;
 
   const recoveryService = {
@@ -129,6 +132,68 @@ describe('RecoveryAutoOrchestratorService', () => {
     await service.runAutomaticRecovery('case-1');
 
     expect(recoveryService.executeRecoveryAction).toHaveBeenCalledWith('case-1');
+  });
+
+  it('escalates (never calls executeRecoveryAction) when the strategy itself selects ESCALATE_HUMAN and policy ALLOWs it', async () => {
+    (recoveryService.createStrategyForCase as jest.Mock).mockResolvedValue({
+      id: 'action-1',
+      type: 'ESCALATE_HUMAN',
+    });
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'ALLOW',
+      policyId: 'policy-1',
+      reason: 'ok',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(recoveryService.executeRecoveryAction).not.toHaveBeenCalled();
+    expect(recoveryService.observeRecovery).not.toHaveBeenCalled();
+    expect(escalationService.escalateRecoveryCase).toHaveBeenCalledWith(
+      'case-1',
+      'Recovery strategy selected escalation to a human.',
+    );
+  });
+
+  it('deletes the dangling PENDING placeholder action after escalating a strategy-selected ESCALATE_HUMAN, leaving exactly one terminal action', async () => {
+    (recoveryService.createStrategyForCase as jest.Mock).mockResolvedValue({
+      id: 'action-1',
+      type: 'ESCALATE_HUMAN',
+    });
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'ALLOW',
+      policyId: 'policy-1',
+      reason: 'ok',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(prisma.recoveryAction.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'action-1', status: 'PENDING' },
+    });
+  });
+
+  it('also cleans up the dangling placeholder when the strategy selects STOP_RECOVERY', async () => {
+    (recoveryService.createStrategyForCase as jest.Mock).mockResolvedValue({
+      id: 'action-2',
+      type: 'STOP_RECOVERY',
+    });
+    (policyService.checkForRecoveryCase as jest.Mock).mockResolvedValue({
+      decision: 'ALLOW',
+      policyId: 'policy-1',
+      reason: 'ok',
+    });
+
+    await service.runAutomaticRecovery('case-1');
+
+    expect(recoveryService.executeRecoveryAction).not.toHaveBeenCalled();
+    expect(escalationService.escalateRecoveryCase).toHaveBeenCalledWith(
+      'case-1',
+      'Recovery strategy selected escalation to a human.',
+    );
+    expect(prisma.recoveryAction.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'action-2', status: 'PENDING' },
+    });
   });
 
   it('escalates instead of executing when policy BLOCKs an active case', async () => {

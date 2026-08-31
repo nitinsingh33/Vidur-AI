@@ -81,11 +81,17 @@ export class CheckoutSweepService implements OnModuleInit {
       where: {
         ...(merchantId ? { merchantId } : {}),
         status: 'CREATED',
-        createdAt: { lte: getCheckoutAbandonmentCutoff() },
         payments: { none: {} },
         recoveryCases: {
           none: { status: { in: ACTIVE_RECOVERY_CASE_STATUSES } },
         },
+        OR: [
+          { createdAt: { lte: getCheckoutAbandonmentCutoff() } },
+          // A real browser tab-close/hide signal from the checkout page
+          // (see StorefrontService.recordAbandonSignal) fast-tracks
+          // detection instead of waiting out the full grace period.
+          { abandonSignalAt: { not: null } },
+        ],
       },
       take: MAX_ORDERS_PER_SWEEP,
       select: { id: true },

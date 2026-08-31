@@ -30,6 +30,13 @@ import { Analytics } from './pages/Analytics'
 import { Policies } from './pages/Policies'
 import { Settings } from './pages/Settings'
 import { DemoDetection } from './pages/DemoDetection'
+import { RecoveryLab } from './pages/RecoveryLab'
+
+import { StoreLayout } from './pages/store/StoreLayout'
+import { StoreHome } from './pages/store/StoreHome'
+import { ProductDetail } from './pages/store/ProductDetail'
+import { CartPage } from './pages/store/CartPage'
+import { CheckoutPage } from './pages/store/CheckoutPage'
 
 import './index.css'
 
@@ -123,6 +130,12 @@ function AppShell() {
                 element={<DemoDetection />}
               />
 
+              {/* Recovery Lab: real-data scenario launcher */}
+              <Route
+                path="/recovery-lab"
+                element={<RecoveryLab />}
+              />
+
               {/* Unknown protected route */}
               <Route
                 path="*"
@@ -198,6 +211,30 @@ function App() {
             path="/signup"
             element={<SignUp />}
           />
+
+          {/* ───────────────── Public storefront (e.g. FashionKart) ───────────────── */}
+
+          <Route
+            path="/store/:slug"
+            element={<StoreLayout />}
+          >
+            <Route
+              index
+              element={<StoreHome />}
+            />
+            <Route
+              path="product/:productId"
+              element={<ProductDetail />}
+            />
+            <Route
+              path="cart"
+              element={<CartPage />}
+            />
+            <Route
+              path="checkout"
+              element={<CheckoutPage />}
+            />
+          </Route>
 
           {/* ───────────────── Protected application ───────────────── */}
 

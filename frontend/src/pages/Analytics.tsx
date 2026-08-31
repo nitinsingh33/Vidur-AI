@@ -9,9 +9,11 @@ import {
 } from 'lucide-react'
 import {
   getAnalyticsSummary,
+  getPaymentHealth,
   getRevenueAtRisk,
   getRevenueRecovered,
   type AnalyticsSummaryResponse,
+  type PaymentHealthResponse,
   type RevenueAtRiskResponse,
   type RevenueRecoveredResponse,
 } from '../api/analytics'
@@ -30,6 +32,8 @@ export function Analytics() {
   const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(
     null,
   )
+  const [paymentHealth, setPaymentHealth] =
+    useState<PaymentHealthResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,15 +42,17 @@ export function Analytics() {
 
     async function load() {
       try {
-        const [risk, recovered, summaryData] = await Promise.all([
+        const [risk, recovered, summaryData, health] = await Promise.all([
           getRevenueAtRisk(token as string),
           getRevenueRecovered(token as string),
           getAnalyticsSummary(token as string),
+          getPaymentHealth(token as string),
         ])
 
         setRevenueAtRisk(risk)
         setRevenueRecovered(recovered)
         setSummary(summaryData)
+        setPaymentHealth(health)
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Unable to load analytics.',
@@ -169,8 +175,145 @@ export function Analytics() {
               tone="amber"
             />
           </div>
+
+          {paymentHealth && <PaymentDegradationSection health={paymentHealth} />}
         </>
       )}
     </section>
+  )
+}
+
+function PaymentDegradationSection({ health }: { health: PaymentHealthResponse }) {
+  const currentRate = health.currentWindowSuccessRate
+  const previousRate = health.previousWindowSuccessRate
+  const delta =
+    currentRate !== null && previousRate !== null
+      ? Math.round((currentRate - previousRate) * 1000) / 10
+      : null
+
+  const maxDailyVolume = Math.max(
+    1,
+    ...health.daily.map((day) => day.captured + day.failed),
+  )
+
+  return (
+    <div className="mt-8 rounded-2xl border border-border bg-card p-6 sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">
+            Payment degradation
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Computed live from the last {health.windowDays} days of real
+            payment history — no predefined incidents.
+          </p>
+        </div>
+
+        {delta !== null && (
+          <div
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              delta >= 0
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+            }`}
+          >
+            {delta >= 0 ? '+' : ''}
+            {delta} pts vs previous window
+          </div>
+        )}
+      </div>
+
+      {health.daily.length === 0 ? (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Not enough payment history yet to chart a trend.
+        </p>
+      ) : (
+        <div className="mt-6 flex h-32 items-end gap-1">
+          {health.daily.map((day) => {
+            const volume = day.captured + day.failed
+            const heightPct = Math.max(4, (volume / maxDailyVolume) * 100)
+            const successRatePct =
+              day.successRate === null ? null : Math.round(day.successRate * 100)
+
+            return (
+              <div
+                key={day.date}
+                className="group relative flex-1"
+                title={`${day.date}: ${day.captured} captured, ${day.failed} failed${
+                  successRatePct !== null ? ` (${successRatePct}% success)` : ''
+                }`}
+              >
+                <div
+                  className="w-full rounded-t-sm bg-secondary transition-colors group-hover:bg-primary/60"
+                  style={{ height: `${heightPct}%` }}
+                >
+                  {volume > 0 && (
+                    <div
+                      className="w-full rounded-t-sm bg-rose-500/60"
+                      style={{
+                        height: `${(day.failed / volume) * 100}%`,
+                        marginTop: `${(day.captured / volume) * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            Top failure reasons
+          </h3>
+          {health.failureReasons.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No failed payments in this window.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {health.failureReasons.map((reason) => (
+                <li
+                  key={reason.reason}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="text-muted-foreground">{reason.reason}</span>
+                  <span className="font-medium text-foreground">
+                    {reason.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">By payment method</h3>
+          {health.byMethod.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No payment data in this window.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {health.byMethod.map((method) => (
+                <li
+                  key={method.method}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="text-muted-foreground">{method.method}</span>
+                  <span className="font-medium text-foreground">
+                    {method.successRate === null
+                      ? '—'
+                      : `${Math.round(method.successRate * 100)}%`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

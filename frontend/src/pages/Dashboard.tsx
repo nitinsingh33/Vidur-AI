@@ -8,9 +8,11 @@ import {
 } from 'lucide-react'
 import {
   getAnalyticsSummary,
+  getRecoveryFunnel,
   getRevenueAtRisk,
   getRevenueRecovered,
   type AnalyticsSummaryResponse,
+  type RecoveryFunnelResponse,
   type RevenueAtRiskResponse,
   type RevenueRecoveredResponse,
 } from '../api/analytics'
@@ -58,6 +60,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
   const [recoveryCases, setRecoveryCases] = useState<RecoveryCase[]>([])
   const [attentionCases, setAttentionCases] = useState<RecoveryCase[]>([])
   const [recentDecisions, setRecentDecisions] = useState<AuditLogEntry[]>([])
+  const [funnel, setFunnel] = useState<RecoveryFunnelResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,6 +79,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           criticalCases,
           escalatedCases,
           decisions,
+          funnelData,
         ] = await Promise.all([
           getRevenueAtRisk(token as string),
           getRevenueRecovered(token as string),
@@ -90,12 +94,14 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
             limit: 5,
           }),
           getAuditLog(token as string, 1, 5),
+          getRecoveryFunnel(token as string),
         ])
 
         setRevenueAtRisk(risk)
         setRevenueRecovered(recovered)
         setSummary(summaryData)
         setRecoveryCases(recoveryCasesData.data)
+        setFunnel(funnelData)
 
         const merged = [...criticalCases.data, ...escalatedCases.data]
 
@@ -344,6 +350,9 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
             </div>
           </div>
 
+          {/* ───────────────────────── Recovery funnel ───────────────────────── */}
+          {funnel && <RecoveryFunnelBar funnel={funnel} />}
+
           {/* ───────────────────────── Operations ───────────────────────── */}
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
             {/* Needs attention */}
@@ -493,5 +502,50 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * "Revenue at risk → detected → Vidur working → recovered" narrative, built
+ * from live RecoveryCase counts (see AnalyticsService.getRecoveryFunnel) —
+ * every number here is a real count of cases that actually exist, not a
+ * fixed illustration.
+ */
+function RecoveryFunnelBar({ funnel }: { funnel: RecoveryFunnelResponse }) {
+  const stages = [
+    { key: 'detected', label: 'Detected', value: funnel.detected, tone: 'sky' },
+    { key: 'inProgress', label: 'Vidur working', value: funnel.inProgress, tone: 'amber' },
+    { key: 'escalated', label: 'Escalated', value: funnel.escalated, tone: 'rose' },
+    { key: 'recovered', label: 'Recovered', value: funnel.recovered, tone: 'emerald' },
+  ] as const
+
+  const toneClasses: Record<(typeof stages)[number]['tone'], string> = {
+    sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+    emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <h3 className="text-sm font-semibold text-foreground">
+        How Vidur handles revenue risk
+      </h3>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {stages.map((stage) => (
+          <div
+            key={stage.key}
+            className={`rounded-xl px-4 py-3 ${toneClasses[stage.tone]}`}
+          >
+            <p className="text-2xl font-semibold tracking-[-0.02em]">
+              {stage.value}
+            </p>
+            <p className="mt-0.5 text-xs font-medium opacity-80">
+              {stage.label}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

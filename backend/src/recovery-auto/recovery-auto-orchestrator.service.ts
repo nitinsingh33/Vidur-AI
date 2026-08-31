@@ -75,6 +75,38 @@ export class RecoveryAutoOrchestratorService {
       );
 
       if (policyResult.decision === 'ALLOW') {
+        /*
+         * The strategy table itself can select ESCALATE_HUMAN/STOP_RECOVERY
+         * directly (e.g. a paused/rejected/cancelled mandate) — but
+         * RecoveryService.executeRecoveryAction explicitly refuses to run
+         * either type (they must go through EscalationService). An ALLOW
+         * decision for one of these means "go ahead and escalate," not
+         * "execute it as if it were a retry/contact action."
+         */
+        if (action.type === 'ESCALATE_HUMAN' || action.type === 'STOP_RECOVERY') {
+          await this.maybeEscalate(
+            recoveryCaseId,
+            'Recovery strategy selected escalation to a human.',
+          );
+
+          /*
+           * createStrategyForCase already created this PENDING action
+           * before we knew it couldn't go through the normal execute path.
+           * EscalationService.escalateRecoveryCase (called by maybeEscalate
+           * above) always records its own terminal action, so this
+           * placeholder is now superseded — remove it rather than leaving a
+           * stuck PENDING row sitting next to the real SUCCESS one in the
+           * case's audit timeline. Guarded on status so a concurrent
+           * execution that already moved this exact row past PENDING is
+           * left untouched.
+           */
+          await this.prisma.recoveryAction.deleteMany({
+            where: { id: action.id, status: 'PENDING' },
+          });
+
+          return;
+        }
+
         await this.recoveryService.executeRecoveryAction(recoveryCaseId);
         await this.recoveryService.observeRecovery(recoveryCaseId);
         return;

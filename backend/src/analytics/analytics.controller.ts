@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { AuthenticatedUser, JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,5 +21,22 @@ export class AnalyticsController {
   @Get('summary')
   getSummary(@Req() request: Request & { user: AuthenticatedUser }) {
     return this.analyticsService.getSummary(request.user.merchantId);
+  }
+
+  @Get('payment-health')
+  getPaymentHealth(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Query('days') days?: string,
+  ) {
+    const parsedDays = Number(days);
+    return this.analyticsService.getPaymentHealth(
+      request.user.merchantId,
+      Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : undefined,
+    );
+  }
+
+  @Get('recovery-funnel')
+  getRecoveryFunnel(@Req() request: Request & { user: AuthenticatedUser }) {
+    return this.analyticsService.getRecoveryFunnel(request.user.merchantId);
   }
 }

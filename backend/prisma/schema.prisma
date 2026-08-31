@@ -155,10 +155,35 @@ model Merchant {
   subscriptions  Subscription[]
   mandates       Mandate[]
   invoices       Invoice[]
+  products       Product[]
   recoveryCases  RecoveryCase[]
   recoveryBatches RecoveryBatch[]
   policies       Policy[]
   auditLogs      AuditLog[]
+}
+
+/**
+ * A storefront product for the merchant's public storefront (e.g.
+ * FashionKart). Purely a catalog/display concern — checkout still creates a
+ * flat-amount Order the same way every other checkout path does; Order
+ * itself carries no line-item relations, only a human-readable
+ * itemsSummary snapshot (see Order below).
+ */
+model Product {
+  id          String   @id @default(uuid())
+  merchantId  String
+  name        String
+  description String?
+  imageUrl    String?
+  priceAmount Decimal  @db.Decimal(18, 2)
+  currency    String   @default("INR")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
 }
 
 model MerchantUser {
@@ -218,6 +243,16 @@ model Order {
   /// authorized it, so RecoveryService knows to retry it headlessly via the
   /// stored token instead of sending a payment link.
   mandateId  String?
+  /// Human-readable snapshot of the cart at checkout time (e.g. "2x Classic
+  /// Tee, 1x Denim Jacket") for a storefront order — display only, never
+  /// used to compute the amount actually charged.
+  itemsSummary String?
+  /// Set by a real browser signal (tab close/hide) sent from the storefront
+  /// checkout page before payment completed — lets the checkout-abandonment
+  /// sweep treat this order as abandoned immediately instead of waiting out
+  /// the full grace period. Null means no such signal was received; the
+  /// sweep still catches it later via the grace-period cutoff either way.
+  abandonSignalAt DateTime?
   amount     Decimal     @db.Decimal(18, 2)
   currency   String      @default("INR")
   status     OrderStatus @default(CREATED)
