@@ -5,6 +5,7 @@ import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
 import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
+import { runWithConcurrency } from '../recovery-auto/concurrency.util';
 import { ACTIVE_RECOVERY_CASE_STATUSES } from '../recovery/recovery-case-status.util';
 import {
   getCheckoutAbandonmentCutoff,
@@ -13,6 +14,7 @@ import {
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 const MAX_ORDERS_PER_SWEEP = 200;
+const AUTO_RECOVERY_CONCURRENCY = 3;
 
 /**
  * Real checkout-drop-off detection: a genuine Order row created via
@@ -104,8 +106,15 @@ export class CheckoutSweepService implements OnModuleInit {
         order.id,
       );
       caseIds.push(recoveryCase.id);
-      void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
     }
+
+    // Fire-and-forget from sweepOnce's perspective (unchanged timing
+    // contract for callers like RecoveryLabService), but internally bounded
+    // so a large sweep can't burst dozens of concurrent /diagnose calls at
+    // Gemini — see concurrency.util.ts.
+    void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
+      this.autoOrchestrator.runAutomaticRecovery(caseId),
+    );
 
     if (staleOrders.length > 0) {
       this.logger.log(

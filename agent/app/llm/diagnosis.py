@@ -1,10 +1,17 @@
+import random
+import time
 from typing import Any
 
 from google import genai
+from google.genai import errors as genai_errors
 
 from .. import config
 
 _client = None
+
+# Bounded retry, rate-limit (429) only — see generate_diagnosis's doc comment.
+MAX_RETRIES = 2
+BASE_BACKOFF_SECONDS = 0.5
 
 
 def _get_client() -> genai.Client:
@@ -38,6 +45,11 @@ def _build_prompt(context: dict[str, Any]) -> str:
     )
 
 
+def _is_rate_limited(error: Exception) -> bool:
+    """True only for a genuine Gemini 429 (RESOURCE_EXHAUSTED) response."""
+    return isinstance(error, genai_errors.APIError) and error.code == 429
+
+
 def generate_diagnosis(context: dict[str, Any]) -> str | None:
     """
     Produces a natural-language diagnosis for one recovery case.
@@ -45,19 +57,46 @@ def generate_diagnosis(context: dict[str, Any]) -> str | None:
     Deliberately best-effort: the deterministic strategy/policy/execution
     path never depends on this output, so a Gemini outage or bad key must
     never block the actual bounded recovery workflow.
+
+    On a rate-limit (429) response specifically, retries up to MAX_RETRIES
+    times with exponential backoff plus jitter before giving up. Any other
+    error (bad key, invalid model, network failure, etc.) fails immediately,
+    exactly as before — retrying those would not help and would only add
+    latency. Never fabricates a response: if every attempt fails, returns
+    None per the existing best-effort contract.
     """
     try:
         client = _get_client()
-        prompt = _build_prompt(context)
-
-        response = client.models.generate_content(
-            model=config.GEMINI_MODEL,
-            contents=prompt,
-        )
-
-        text = response.text
-
-        return text.strip() if text else None
     except Exception as error:
-        print(f"[llm] diagnosis generation failed: {error}")
+        print(f"[llm] diagnosis generation failed: {type(error).__name__}")
         return None
+
+    prompt = _build_prompt(context)
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=prompt,
+            )
+
+            text = response.text
+            return text.strip() if text else None
+        except Exception as error:
+            rate_limited = _is_rate_limited(error)
+            category = "rate_limited_429" if rate_limited else "other"
+
+            print(
+                f"[llm] diagnosis generation attempt {attempt + 1}/{MAX_RETRIES + 1} "
+                f"failed (category={category}, type={type(error).__name__})"
+            )
+
+            if not rate_limited or attempt == MAX_RETRIES:
+                return None
+
+            backoff_seconds = BASE_BACKOFF_SECONDS * (2**attempt) + random.uniform(
+                0, 0.25
+            )
+            time.sleep(backoff_seconds)
+
+    return None

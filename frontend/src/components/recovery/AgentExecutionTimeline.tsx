@@ -120,6 +120,15 @@ export function AgentExecutionTimeline({
     observation,
   ] = stages
 
+  // agentPipeline.ts marks the diagnosis stage 'completed' both when Gemini
+  // actually returned reasoning and when it didn't (best-effort — see
+  // deriveAgentPipeline's diagnosisStage) — 'No diagnosis returned' is its
+  // literal sentinel for the latter. Distinguish them here so the UI never
+  // claims reasoning is ready when aiReasoning is actually null.
+  const hasRealDiagnosis =
+    diagnosis.status === 'completed' &&
+    diagnosis.detail !== 'No diagnosis returned'
+
   const policyCheck = guardrails.find((g) => g.key === 'policy')
   const policyDecision =
     policyCheck?.detail?.replace('Decision: ', '') ?? null
@@ -173,7 +182,9 @@ export function AgentExecutionTimeline({
             : undefined,
       caption:
         diagnosis.status === 'completed'
-          ? 'Gemini reasoning ready'
+          ? hasRealDiagnosis
+            ? 'Gemini reasoning ready'
+            : 'No diagnosis returned'
           : diagnosis.detail,
     },
     {

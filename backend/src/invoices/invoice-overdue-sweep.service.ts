@@ -5,9 +5,11 @@ import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
 import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
+import { runWithConcurrency } from '../recovery-auto/concurrency.util';
 
 const DEFAULT_INTERVAL_MINUTES = 60;
 const MAX_INVOICES_PER_SWEEP = 200;
+const AUTO_RECOVERY_CONCURRENCY = 3;
 
 /**
  * Real overdue-receivable detection: an Invoice created (via manual entry
@@ -87,8 +89,15 @@ export class InvoiceOverdueSweepService implements OnModuleInit {
         invoice.id,
       );
       caseIds.push(recoveryCase.id);
-      void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
     }
+
+    // Fire-and-forget from sweepOnce's perspective (unchanged timing
+    // contract for callers like RecoveryLabService), but internally bounded
+    // so a 200-case sweep can't burst 200 concurrent /diagnose calls at
+    // Gemini — see concurrency.util.ts.
+    void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
+      this.autoOrchestrator.runAutomaticRecovery(caseId),
+    );
 
     if (staleInvoices.length > 0) {
       this.logger.log(

@@ -6,10 +6,12 @@ import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
+import { runWithConcurrency } from '../recovery-auto/concurrency.util';
 import { RecoveryCaseStatus } from '../generated/prisma/enums';
 
 const DEFAULT_INTERVAL_MINUTES = 15;
 const MAX_PROMISES_PER_SWEEP = 200;
+const AUTO_RECOVERY_CONCURRENCY = 3;
 
 /**
  * A case in one of these statuses is still being actively worked by the
@@ -89,6 +91,7 @@ export class PromiseToPaySweepService implements OnModuleInit {
 
     let kept = 0;
     let missed = 0;
+    const resumeCaseIds: string[] = [];
 
     for (const promise of duePromises) {
       const recoveryCase = promise.recoveryCase;
@@ -169,9 +172,19 @@ export class PromiseToPaySweepService implements OnModuleInit {
        * background noise.
        */
       if (RESUMABLE_CASE_STATUSES.includes(recoveryCase.status)) {
-        void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
+        resumeCaseIds.push(recoveryCase.id);
       }
     }
+
+    // Fire-and-forget from sweepOnce's perspective (unchanged timing
+    // contract), but internally bounded so a sweep with many missed
+    // promises can't burst dozens of concurrent /diagnose calls at Gemini —
+    // see concurrency.util.ts.
+    void runWithConcurrency(
+      resumeCaseIds,
+      AUTO_RECOVERY_CONCURRENCY,
+      (caseId) => this.autoOrchestrator.runAutomaticRecovery(caseId),
+    );
 
     if (duePromises.length > 0) {
       this.logger.log(
