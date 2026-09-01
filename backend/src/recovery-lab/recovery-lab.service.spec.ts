@@ -13,6 +13,7 @@ describe('RecoveryLabService', () => {
 
   const prisma = {
     customer: { upsert: jest.fn() },
+    merchant: { findUnique: jest.fn() },
     order: { create: jest.fn() },
     subscription: { create: jest.fn(), update: jest.fn() },
     mandate: { create: jest.fn() },
@@ -53,6 +54,9 @@ describe('RecoveryLabService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (prisma.customer.upsert as jest.Mock).mockResolvedValue({ id: 'lab-customer' });
+    (prisma.merchant.findUnique as jest.Mock).mockResolvedValue({
+      isDemoMerchant: false,
+    });
     service = new RecoveryLabService(
       prisma,
       paymentsService,
@@ -73,11 +77,30 @@ describe('RecoveryLabService', () => {
 
     expect(paymentsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: 'merchant-1', status: 'FAILED' }),
+      { isDemoData: false },
     );
     expect(riskService.assessPayment).toHaveBeenCalledWith('payment-1');
     expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-1');
     expect(prisma.recoveryOutcome.create).not.toHaveBeenCalled();
     expect(result.recoveryCaseId).toBe('case-1');
+  });
+
+  it('launchPaymentFailure tags the payment isDemoData when the merchant is the dedicated demo tenant', async () => {
+    (prisma.merchant.findUnique as jest.Mock).mockResolvedValue({
+      isDemoMerchant: true,
+    });
+    (paymentsService.create as jest.Mock).mockResolvedValue({ id: 'payment-1' });
+    (riskService.assessPayment as jest.Mock).mockResolvedValue({ id: 'case-1' });
+
+    await service.launchPaymentFailure('fashionkart-merchant', {});
+
+    expect(prisma.merchant.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'fashionkart-merchant' } }),
+    );
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      expect.anything(),
+      { isDemoData: true },
+    );
   });
 
   it('launchCheckoutAbandonment creates a real Order with an abandon signal and reuses the real sweep, never opens a case itself', async () => {
@@ -132,6 +155,7 @@ describe('RecoveryLabService', () => {
     expect(invoicesService.create).toHaveBeenCalledWith(
       'merchant-1',
       expect.objectContaining({ customerId: 'lab-customer' }),
+      { isDemoData: false },
     );
     expect(invoiceOverdueSweepService.sweepOnce).toHaveBeenCalledWith('merchant-1');
     expect(result.recoveryCaseId).toBe('case-4');
@@ -176,6 +200,7 @@ describe('RecoveryLabService', () => {
     expect(invoicesService.create).toHaveBeenCalledWith(
       'merchant-1',
       expect.objectContaining({ customerId: 'lab-customer' }),
+      { isDemoData: false },
     );
     expect(promiseToPayService.create).toHaveBeenCalledWith(
       'merchant-1',

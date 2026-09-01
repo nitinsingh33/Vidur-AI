@@ -91,6 +91,7 @@ describe('DemoService', () => {
           status: 'FAILED',
           failureReason: 'insufficient_funds',
         }),
+        { isDemoData: true },
       );
 
       const createCallArg = (paymentsService.create as jest.Mock).mock

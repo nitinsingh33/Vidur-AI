@@ -156,6 +156,13 @@ model Merchant {
   /// /razorpay/webhook/merchant/:merchantId route. Never returned by any API
   /// response.
   razorpayWebhookSecretEncrypted String?
+  /// True only for the dedicated FashionKart demo tenant (set by
+  /// seed-fashionkart.ts). Gates two things: which merchant's transactional
+  /// data may ever be tagged isDemoData at creation time, and which
+  /// merchant FashionKartDemoResetService will operate on at all — a
+  /// belt-and-suspenders check independent of the ADMIN-role/JWT check on
+  /// the reset endpoint itself.
+  isDemoMerchant Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -266,6 +273,13 @@ model Order {
   /// the full grace period. Null means no such signal was received; the
   /// sweep still catches it later via the grace-period cutoff either way.
   abandonSignalAt DateTime?
+  /// Set only when this Order was created for the dedicated FashionKart
+  /// demo tenant (RazorpayService.createCheckoutOrder /
+  /// RecoveryLabService), never client-settable. Lets
+  /// FashionKartDemoResetService find exactly the rows it's allowed to
+  /// delete — defaults false, so every pre-existing Order is automatically
+  /// excluded.
+  isDemoData Boolean     @default(false)
   amount     Decimal     @db.Decimal(18, 2)
   currency   String      @default("INR")
   status     OrderStatus @default(CREATED)
@@ -298,6 +312,11 @@ model Payment {
   failureReason String?
   attemptNumber Int           @default(1)
   externalId    String?
+  /// See Order.isDemoData — set only for a standalone demo Payment (one
+  /// with no orderId, e.g. Recovery Lab's payment-degradation scenario).
+  /// An order-linked demo payment is found transitively via its Order
+  /// instead, so this stays false for those.
+  isDemoData    Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -342,6 +361,8 @@ model Subscription {
   status             SubscriptionStatus @default(ACTIVE)
   nextBillingAt      DateTime?
   failedPaymentCount Int                @default(0)
+  /// See Order.isDemoData.
+  isDemoData         Boolean            @default(false)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -385,6 +406,8 @@ model Mandate {
   /// enforces a minimum gap between re-presentments, since Razorpay (unlike
   /// Subscriptions) does not auto-retry a failed mandate debit itself.
   lastAttemptAt    DateTime?
+  /// See Order.isDemoData.
+  isDemoData Boolean       @default(false)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
@@ -409,6 +432,8 @@ model Invoice {
   status     InvoiceStatus @default(ISSUED)
   dueDate    DateTime
   paidAt     DateTime?
+  /// See Order.isDemoData.
+  isDemoData Boolean       @default(false)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

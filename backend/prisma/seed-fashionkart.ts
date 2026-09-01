@@ -97,12 +97,13 @@ async function main() {
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: FASHIONKART_SLUG },
-    update: {},
+    update: { isDemoMerchant: true },
     create: {
       name: "FashionKart",
       email: "hello@fashionkart.vidur.ai",
       slug: FASHIONKART_SLUG,
       currency: "INR",
+      isDemoMerchant: true,
     },
   });
   console.log(`Merchant ready: ${merchant.id} (slug=${merchant.slug})`);

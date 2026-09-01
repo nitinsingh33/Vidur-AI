@@ -29,7 +29,18 @@ export class InvoicesService {
     });
   }
 
-  async create(merchantId: string, dto: CreateInvoiceDto) {
+  /**
+   * `options.isDemoData` is intentionally not part of CreateInvoiceDto — it
+   * must never be settable from a client request body (POST /invoices is a
+   * plain authenticated merchant endpoint). Only RecoveryLabService, which
+   * constructs the DTO itself, may pass it; the public controller always
+   * calls create(merchantId, dto) with no options, so it defaults to false.
+   */
+  async create(
+    merchantId: string,
+    dto: CreateInvoiceDto,
+    options?: { isDemoData?: boolean },
+  ) {
     const customer = await this.prisma.customer.findUnique({
       where: { id: dto.customerId },
     });
@@ -46,6 +57,7 @@ export class InvoicesService {
         currency: dto.currency ?? 'INR',
         dueDate: new Date(dto.dueDate),
         status: 'ISSUED',
+        isDemoData: options?.isDemoData ?? false,
       },
       include: { customer: true },
     });

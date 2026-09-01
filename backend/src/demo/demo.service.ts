@@ -59,17 +59,24 @@ export class DemoService {
       dto.customerName,
     );
 
-    const payment = await this.paymentsService.create({
-      merchantId,
-      customerId: customer.id,
-      amount: dto.amount.toString(),
-      currency: 'INR',
-      method: dto.method ?? PaymentMethod.UPI,
-      status: PaymentStatus.FAILED,
-      failureReason: dto.failureReason ?? 'insufficient_funds',
-      attemptNumber: 1,
-      externalId: `${DEMO_EXTERNAL_ID_PREFIX}${randomUUID()}`,
-    });
+    const payment = await this.paymentsService.create(
+      {
+        merchantId,
+        customerId: customer.id,
+        amount: dto.amount.toString(),
+        currency: 'INR',
+        method: dto.method ?? PaymentMethod.UPI,
+        status: PaymentStatus.FAILED,
+        failureReason: dto.failureReason ?? 'insufficient_funds',
+        attemptNumber: 1,
+        externalId: `${DEMO_EXTERNAL_ID_PREFIX}${randomUUID()}`,
+      },
+      // This entire endpoint exists only to synthesize demo data by
+      // design (see the class doc comment) — unconditionally true, unlike
+      // RecoveryLabService which checks merchant.isDemoMerchant since it's
+      // reachable by any merchant.
+      { isDemoData: true },
+    );
 
     const recoveryCase = await this.riskService.assessPayment(payment.id);
 

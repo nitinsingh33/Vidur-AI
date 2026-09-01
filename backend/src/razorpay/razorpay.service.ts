@@ -226,6 +226,15 @@ export class RazorpayService {
     const { keyId } = await this.resolveCredentials(params.merchantId);
     const order = await this.createOrder(params);
 
+    // Tags this Order for FashionKartDemoResetService — never client-settable,
+    // computed purely from the authenticated merchantId. False for every
+    // other merchant, so a real merchant's real checkout orders are never
+    // eligible for automatic deletion.
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: params.merchantId },
+      select: { isDemoMerchant: true },
+    });
+
     const internalOrder = await this.prisma.order.create({
       data: {
         merchantId: params.merchantId,
@@ -235,6 +244,7 @@ export class RazorpayService {
         currency: order.currency,
         itemsSummary: params.itemsSummary,
         status: 'CREATED',
+        isDemoData: merchant?.isDemoMerchant ?? false,
       },
     });
 

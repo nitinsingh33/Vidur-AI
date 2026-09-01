@@ -32,6 +32,20 @@ export interface DemoResetResponse {
   auditLogsDeleted: number
 }
 
+export interface FashionKartResetSummary {
+  ordersDeleted: number
+  paymentsDeleted: number
+  paymentEventsDeleted: number
+  subscriptionsDeleted: number
+  invoicesDeleted: number
+  mandatesDeleted: number
+  recoveryCasesDeleted: number
+  recoveryActionsDeleted: number
+  recoveryOutcomesDeleted: number
+  promisesToPayDeleted: number
+  auditLogsDeleted: number
+}
+
 async function postJson<T>(
   path: string,
   token: string,
@@ -65,4 +79,15 @@ export function triggerDemoPaymentFailure(
 
 export function resetDemo(token: string): Promise<DemoResetResponse> {
   return postJson('/demo/reset', token)
+}
+
+/**
+ * The safe, scoped reset — only ever removes isDemoData-tagged rows for the
+ * authenticated FashionKart admin's own merchant. See
+ * FashionKartDemoResetService on the backend for exactly what qualifies.
+ */
+export function resetFashionKartDemoData(
+  token: string,
+): Promise<FashionKartResetSummary> {
+  return postJson('/demo/reset-fashionkart', token)
 }

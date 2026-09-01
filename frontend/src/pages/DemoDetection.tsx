@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   CheckCircle2,
   Circle,
   CreditCard,
@@ -8,7 +9,10 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { resetDemo, type DemoResetResponse } from '../api/demo'
+import {
+  resetFashionKartDemoData,
+  type FashionKartResetSummary,
+} from '../api/demo'
 import {
   createRazorpayCheckoutOrder,
   getPaymentByExternalId,
@@ -64,7 +68,10 @@ export function DemoDetection() {
   const [detectedPayment, setDetectedPayment] =
     useState<PaymentWithCase | null>(null)
   const [resetting, setResetting] = useState(false)
-  const [lastReset, setLastReset] = useState<DemoResetResponse | null>(null)
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const [lastReset, setLastReset] = useState<FashionKartResetSummary | null>(
+    null,
+  )
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -200,13 +207,14 @@ export function DemoDetection() {
     if (!token) return
 
     setResetting(true)
+    setConfirmingReset(false)
     setLiveError(null)
     setDetectedPayment(null)
     setLiveStage('idle')
     stopPolling()
 
     try {
-      const result = await resetDemo(token)
+      const result = await resetFashionKartDemoData(token)
       setLastReset(result)
     } catch (err) {
       setLiveError(
@@ -267,8 +275,8 @@ export function DemoDetection() {
         <Button
           variant="outline"
           size="sm"
-          onClick={handleReset}
-          disabled={resetting || !token}
+          onClick={() => setConfirmingReset(true)}
+          disabled={resetting || confirmingReset || !token}
           className="shrink-0 gap-2"
         >
           {resetting ? (
@@ -276,16 +284,59 @@ export function DemoDetection() {
           ) : (
             <RotateCcw size={14} />
           )}
-          Reset demo
+          Reset FashionKart demo
         </Button>
       </header>
 
+      {confirmingReset && (
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-2.5">
+            <AlertTriangle
+              size={16}
+              className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+            />
+            <p className="text-amber-800 dark:text-amber-300">
+              This permanently deletes FashionKart's demo orders, payments,
+              and recovery cases (and their actions/outcomes/promises/audit
+              entries). Products, policies, and the admin account are never
+              touched. This cannot be undone.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setConfirmingReset(false)}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleReset} disabled={resetting}>
+              {resetting && <Loader2 size={14} className="animate-spin" />}
+              Reset demo data
+            </Button>
+          </div>
+        </div>
+      )}
+
       {lastReset && (
-        <div className="mt-4 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
-          Cleared {lastReset.paymentsDeleted} payment
-          {lastReset.paymentsDeleted === 1 ? '' : 's'} and{' '}
-          {lastReset.recoveryCasesDeleted} recovery case
-          {lastReset.recoveryCasesDeleted === 1 ? '' : 's'}.
+        <div className="mt-4 rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">
+            FashionKart demo data reset.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+            <span>{lastReset.ordersDeleted} order(s)</span>
+            <span>{lastReset.paymentsDeleted} payment(s)</span>
+            <span>{lastReset.paymentEventsDeleted} payment event(s)</span>
+            <span>{lastReset.subscriptionsDeleted} subscription(s)</span>
+            <span>{lastReset.invoicesDeleted} invoice(s)</span>
+            <span>{lastReset.mandatesDeleted} mandate(s)</span>
+            <span>{lastReset.recoveryCasesDeleted} recovery case(s)</span>
+            <span>{lastReset.recoveryActionsDeleted} action(s)</span>
+            <span>{lastReset.recoveryOutcomesDeleted} outcome(s)</span>
+            <span>{lastReset.promisesToPayDeleted} promise(s)</span>
+            <span>{lastReset.auditLogsDeleted} audit log(s)</span>
+          </div>
         </div>
       )}
 

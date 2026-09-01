@@ -11,7 +11,18 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreatePaymentDto) {
+  /**
+   * `options.isDemoData` is intentionally not part of CreatePaymentDto — it
+   * must never be settable from a client request body (POST /payments is a
+   * plain authenticated merchant endpoint). Only internal callers that
+   * construct a Payment themselves (RecoveryLabService, DemoService) may
+   * pass it; the public controller always calls create(dto) with no
+   * options, so it defaults to false.
+   */
+  async create(
+    dto: CreatePaymentDto,
+    options?: { isDemoData?: boolean },
+  ) {
     try {
       return await this.prisma.payment.create({
         data: {
@@ -25,6 +36,7 @@ export class PaymentsService {
           failureReason: dto.failureReason,
           attemptNumber: dto.attemptNumber ?? 1,
           externalId: dto.externalId,
+          isDemoData: options?.isDemoData ?? false,
           events: {
             create: {
               type: dto.status === 'FAILED' ? 'FAILED' : 'CREATED',

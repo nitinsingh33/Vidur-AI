@@ -37,6 +37,23 @@ export class RecoveryLabService {
     private readonly promiseToPayService: PromiseToPayService,
   ) {}
 
+  /**
+   * Recovery Lab data is always test/lab data by definition, for whichever
+   * merchant launches it — but isDemoData is only meaningful (and only
+   * ever eligible for FashionKartDemoResetService to delete) when the
+   * merchant itself is the dedicated demo tenant. Checking this here keeps
+   * isDemoData's meaning consistent with RazorpayService.createCheckoutOrder
+   * rather than tagging every merchant's lab runs unconditionally.
+   */
+  private async isDemoMerchant(merchantId: string): Promise<boolean> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { isDemoMerchant: true },
+    });
+
+    return merchant?.isDemoMerchant ?? false;
+  }
+
   private async getOrCreateLabCustomer(merchantId: string, customerName?: string) {
     const externalId = `${LAB_EXTERNAL_ID_PREFIX}CUSTOMER`;
 
@@ -59,18 +76,22 @@ export class RecoveryLabService {
    */
   async launchPaymentFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
-    const payment = await this.paymentsService.create({
-      merchantId,
-      customerId: customer.id,
-      amount: (dto.amount ?? 2499).toString(),
-      currency: 'INR',
-      method: PaymentMethod.UPI,
-      status: PaymentStatus.FAILED,
-      failureReason: 'insufficient_funds',
-      attemptNumber: 1,
-      externalId: `${LAB_EXTERNAL_ID_PREFIX}${randomUUID()}`,
-    });
+    const payment = await this.paymentsService.create(
+      {
+        merchantId,
+        customerId: customer.id,
+        amount: (dto.amount ?? 2499).toString(),
+        currency: 'INR',
+        method: PaymentMethod.UPI,
+        status: PaymentStatus.FAILED,
+        failureReason: 'insufficient_funds',
+        attemptNumber: 1,
+        externalId: `${LAB_EXTERNAL_ID_PREFIX}${randomUUID()}`,
+      },
+      { isDemoData },
+    );
 
     const recoveryCase = await this.riskService.assessPayment(payment.id);
     void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
@@ -92,6 +113,7 @@ export class RecoveryLabService {
    */
   async launchCheckoutAbandonment(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
     const order = await this.prisma.order.create({
       data: {
@@ -103,6 +125,7 @@ export class RecoveryLabService {
         status: 'CREATED',
         itemsSummary: 'Recovery Lab simulated cart',
         abandonSignalAt: new Date(),
+        isDemoData,
       },
     });
 
@@ -125,6 +148,7 @@ export class RecoveryLabService {
    */
   async launchSubscriptionFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
     const subscription = await this.prisma.subscription.create({
       data: {
@@ -134,6 +158,7 @@ export class RecoveryLabService {
         amount: dto.amount ?? 999,
         currency: 'INR',
         status: 'ACTIVE',
+        isDemoData,
       },
     });
 
@@ -161,16 +186,21 @@ export class RecoveryLabService {
    */
   async launchInvoiceOverdue(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
     const overdueDueDate = new Date();
     overdueDueDate.setDate(overdueDueDate.getDate() - 10);
 
-    const invoice = await this.invoicesService.create(merchantId, {
-      customerId: customer.id,
-      amount: dto.amount ?? 45000,
-      currency: 'INR',
-      dueDate: overdueDueDate.toISOString(),
-    });
+    const invoice = await this.invoicesService.create(
+      merchantId,
+      {
+        customerId: customer.id,
+        amount: dto.amount ?? 45000,
+        currency: 'INR',
+        dueDate: overdueDueDate.toISOString(),
+      },
+      { isDemoData },
+    );
 
     const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(merchantId);
 
@@ -194,6 +224,7 @@ export class RecoveryLabService {
    */
   async launchMandateFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
     const expireAt = new Date();
     expireAt.setFullYear(expireAt.getFullYear() + 1);
@@ -209,6 +240,7 @@ export class RecoveryLabService {
         frequency: 'monthly',
         status: 'PAUSED',
         expireAt,
+        isDemoData,
       },
     });
 
@@ -244,18 +276,23 @@ export class RecoveryLabService {
     actorId: string,
   ) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
+    const isDemoData = await this.isDemoMerchant(merchantId);
 
     const overdueDueDate = new Date();
     overdueDueDate.setDate(overdueDueDate.getDate() - 10);
 
     const amount = dto.amount ?? 60000;
 
-    const invoice = await this.invoicesService.create(merchantId, {
-      customerId: customer.id,
-      amount,
-      currency: 'INR',
-      dueDate: overdueDueDate.toISOString(),
-    });
+    const invoice = await this.invoicesService.create(
+      merchantId,
+      {
+        customerId: customer.id,
+        amount,
+        currency: 'INR',
+        dueDate: overdueDueDate.toISOString(),
+      },
+      { isDemoData },
+    );
 
     const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(merchantId);
     const recoveryCaseId = sweepResult.caseIds[0] ?? null;
