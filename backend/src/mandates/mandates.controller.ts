@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -47,5 +49,17 @@ export class MandatesController {
   @Post('run-retry-sequencer')
   runSequencer(@Req() request: Request & { user: AuthenticatedUser }) {
     return this.sequencerService.sweepOnce(request.user.merchantId);
+  }
+
+  @Delete(':id')
+  delete(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    if (request.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Only an ADMIN may delete a mandate.');
+    }
+
+    return this.mandatesService.delete(id, request.user.merchantId);
   }
 }

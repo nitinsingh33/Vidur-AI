@@ -1,5 +1,7 @@
 import {
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -42,5 +44,19 @@ export class RecoveryCasesController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.recoveryCasesService.findOne(id, request.user.merchantId);
+  }
+
+  @Delete(':id')
+  delete(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    if (request.user.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only an ADMIN may delete a recovery case.',
+      );
+    }
+
+    return this.recoveryCasesService.delete(id, request.user.merchantId);
   }
 }

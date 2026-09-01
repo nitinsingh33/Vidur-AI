@@ -173,6 +173,28 @@ export async function getRecoveryCase(
   return response.json()
 }
 
+export async function deleteRecoveryCase(
+  token: string,
+  recoveryCaseId: string,
+): Promise<{ deleted: true; id: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/recovery-cases/${recoveryCaseId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(
+      detail?.message ?? `Delete recovery case failed: ${response.status}`,
+    )
+  }
+
+  return response.json()
+}
+
 export async function createRecoveryStrategy(
   token: string,
   recoveryCaseId: string,

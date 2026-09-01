@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -39,5 +41,17 @@ export class SubscriptionsController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.subscriptionsService.findOne(id, request.user.merchantId);
+  }
+
+  @Delete(':id')
+  delete(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    if (request.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Only an ADMIN may delete a subscription.');
+    }
+
+    return this.subscriptionsService.delete(id, request.user.merchantId);
   }
 }

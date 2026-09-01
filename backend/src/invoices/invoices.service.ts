@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ACTIVE_RECOVERY_CASE_STATUSES } from '../recovery/recovery-case-status.util';
+import { deleteRecoveryCasesCascade } from '../recovery/recovery-case-cleanup.util';
 
 @Injectable()
 export class InvoicesService {
@@ -97,6 +98,38 @@ export class InvoicesService {
     }
 
     return invoice;
+  }
+
+  /**
+   * Deletes this invoice plus any recovery case(s) (and their promises-to-
+   * pay) opened against it. Never touches the customer or any other
+   * invoice — this only clears one receivable and its recovery history.
+   */
+  async delete(id: string, merchantId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      select: { id: true, merchantId: true },
+    });
+
+    if (!invoice || invoice.merchantId !== merchantId) {
+      throw new NotFoundException(`Invoice ${id} not found.`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const cases = await tx.recoveryCase.findMany({
+        where: { invoiceId: id },
+        select: { id: true },
+      });
+
+      await deleteRecoveryCasesCascade(
+        tx,
+        cases.map((item) => item.id),
+      );
+
+      await tx.invoice.delete({ where: { id } });
+    });
+
+    return { deleted: true, id };
   }
 
   /**

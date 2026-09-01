@@ -75,6 +75,22 @@ export interface CreateMandateResult {
   method: 'upi' | 'emandate'
 }
 
+export async function deleteMandate(
+  token: string,
+  mandateId: string,
+): Promise<{ deleted: true; id: string }> {
+  const response = await fetch(`${API_BASE_URL}/mandates/${mandateId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
 export async function createMandate(
   token: string,
   payload: CreateMandatePayload,

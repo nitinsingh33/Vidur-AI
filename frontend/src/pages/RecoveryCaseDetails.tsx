@@ -10,13 +10,18 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
-import { getRecoveryCase, type RecoveryCase } from "../api/recoveryCases";
+import {
+  deleteRecoveryCase,
+  getRecoveryCase,
+  type RecoveryCase,
+} from "../api/recoveryCases";
 import { getCaseAuditTrail, type AuditLogEntry } from "../api/audit";
 import { VidurRecoveryPanel } from "../components/recovery/VidurRecoveryPanel";
 import { PromiseToPayPanel } from "../components/recovery/PromiseToPayPanel";
 import { AgentAuditTrail } from "../components/recovery/AgentAuditTrail";
 import { AgentReasoningCard } from "../components/recovery/AgentReasoningCard";
 import { StatusBadge } from "../components/ui/status-badge";
+import { DeleteButton } from "../components/ui/delete-button";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -83,6 +88,13 @@ export function RecoveryCaseDetails() {
 
     loadCase();
   }, [recoveryCaseId, token]);
+
+  async function handleDelete() {
+    if (!token || !recoveryCaseId) return;
+
+    await deleteRecoveryCase(token, recoveryCaseId);
+    navigate("/recovery-cases");
+  }
 
   if (loading) {
     return (
@@ -158,7 +170,7 @@ export function RecoveryCaseDetails() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusBadge
             label={recoveryCase.status}
             tone={caseStatusTone(recoveryCase.status)}
@@ -168,6 +180,8 @@ export function RecoveryCaseDetails() {
             label={`${formatLabel(recoveryCase.riskLevel)} risk`}
             tone={riskTone(recoveryCase.riskLevel)}
           />
+
+          <DeleteButton onConfirm={handleDelete} label="Delete case" />
         </div>
       </header>
 

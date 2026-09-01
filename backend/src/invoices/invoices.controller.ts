@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -58,5 +60,17 @@ export class InvoicesController {
   @Post('sweep-overdue')
   runSweep(@Req() request: Request & { user: AuthenticatedUser }) {
     return this.sweepService.sweepOnce(request.user.merchantId);
+  }
+
+  @Delete(':id')
+  delete(
+    @Req() request: Request & { user: AuthenticatedUser },
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    if (request.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Only an ADMIN may delete an invoice.');
+    }
+
+    return this.invoicesService.delete(id, request.user.merchantId);
   }
 }

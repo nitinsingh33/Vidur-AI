@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { deleteRecoveryCasesCascade } from '../recovery/recovery-case-cleanup.util';
 
 @Injectable()
 export class SubscriptionsService {
@@ -95,5 +96,39 @@ export class SubscriptionsService {
     }
 
     return subscription;
+  }
+
+  /**
+   * Deletes this subscription plus any recovery case(s) opened against it —
+   * a case left pointing at a deleted subscription would just be orphaned
+   * clutter, not a meaningful case. Never touches Razorpay's own copy of
+   * the subscription (there is no cancel/delete call to it here) — this
+   * only clears Vidur's local record and its recovery history.
+   */
+  async delete(id: string, merchantId: string) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id },
+      select: { id: true, merchantId: true },
+    });
+
+    if (!subscription || subscription.merchantId !== merchantId) {
+      throw new NotFoundException(`Subscription ${id} not found.`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const cases = await tx.recoveryCase.findMany({
+        where: { subscriptionId: id },
+        select: { id: true },
+      });
+
+      await deleteRecoveryCasesCascade(
+        tx,
+        cases.map((item) => item.id),
+      );
+
+      await tx.subscription.delete({ where: { id } });
+    });
+
+    return { deleted: true, id };
   }
 }

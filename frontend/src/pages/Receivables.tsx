@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import {
   createInvoice,
+  deleteInvoice,
   getInvoices,
   markInvoicePaid,
   runInvoiceSweep,
@@ -27,6 +28,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Skeleton } from '../components/ui/skeleton'
 import { StatusBadge } from '../components/ui/status-badge'
+import { DeleteButton } from '../components/ui/delete-button'
 import {
   actionStatusTone,
   caseStatusTone,
@@ -162,6 +164,14 @@ export function Receivables() {
     } finally {
       setMarkingPaidId(null)
     }
+  }
+
+  async function handleDeleteInvoice(invoiceId: string) {
+    if (!token) return
+
+    await deleteInvoice(token, invoiceId)
+
+    setInvoices((current) => current.filter((item) => item.id !== invoiceId))
   }
 
   async function handleRunSweep() {
@@ -514,24 +524,33 @@ export function Receivables() {
                             )}
                           </td>
 
-                          <td className="px-3 py-3.5 text-right">
-                            {invoice.status !== 'PAID' && (
-                              <Button
-                                variant="outline"
-                                className="h-7 px-2.5 text-xs"
-                                disabled={markingPaidId === invoice.id}
-                                onClick={() => handleMarkPaid(invoice.id)}
-                              >
-                                {markingPaidId === invoice.id ? (
-                                  <Loader2
-                                    size={13}
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  'Mark paid'
-                                )}
-                              </Button>
-                            )}
+                          <td className="px-3 py-3.5">
+                            <div className="flex items-center justify-end gap-2">
+                              {invoice.status !== 'PAID' && (
+                                <Button
+                                  variant="outline"
+                                  className="h-7 px-2.5 text-xs"
+                                  disabled={markingPaidId === invoice.id}
+                                  onClick={() => handleMarkPaid(invoice.id)}
+                                >
+                                  {markingPaidId === invoice.id ? (
+                                    <Loader2
+                                      size={13}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    'Mark paid'
+                                  )}
+                                </Button>
+                              )}
+
+                              <DeleteButton
+                                size="sm"
+                                onConfirm={() =>
+                                  handleDeleteInvoice(invoice.id)
+                                }
+                              />
+                            </div>
                           </td>
                         </tr>
                       )

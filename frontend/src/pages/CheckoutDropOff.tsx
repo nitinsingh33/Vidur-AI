@@ -8,6 +8,7 @@ import {
   Timer,
 } from 'lucide-react'
 import {
+  deleteRecoveryCase,
   getRecoveryCases,
   type RecoveryCase,
 } from '../api/recoveryCases'
@@ -81,6 +82,16 @@ export function CheckoutDropOff() {
     } finally {
       setSweeping(false)
     }
+  }
+
+  async function handleDeleteRecoveryCase(recoveryCaseId: string) {
+    if (!token) return
+
+    await deleteRecoveryCase(token, recoveryCaseId)
+
+    setCases((current) =>
+      current.filter((item) => item.id !== recoveryCaseId),
+    )
   }
 
   const openCases = cases.filter((item) => OPEN_STATUSES.has(item.status))
@@ -187,6 +198,7 @@ export function CheckoutDropOff() {
               onOpenRecoveryCase={(recoveryCaseId) =>
                 navigate(`/recovery-cases/${recoveryCaseId}`)
               }
+              onDeleteRecoveryCase={handleDeleteRecoveryCase}
             />
           </div>
         </>

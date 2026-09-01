@@ -1,11 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  CircleDollarSign,
-  ShieldAlert,
-  TrendingUp,
-  Users,
-} from 'lucide-react'
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { CircleDollarSign, ShieldAlert, TrendingUp, Users } from "lucide-react";
 import {
   getAnalyticsSummary,
   getRecoveryFunnel,
@@ -15,65 +10,64 @@ import {
   type RecoveryFunnelResponse,
   type RevenueAtRiskResponse,
   type RevenueRecoveredResponse,
-} from '../api/analytics'
-import { getRecoveryCases } from '../api/recoveryCases'
-import type { RecoveryCase } from '../api/recoveryCases'
-import { getAuditLog, type AuditLogEntry } from '../api/audit'
-import { useAuth } from '../context/AuthContext'
-import { MetricCard } from '../components/dashboard/MetricCard'
-import { RecoveryCasesTable } from '../components/recovery/RecoveryCasesTable'
-import { StatusBadge } from '../components/ui/status-badge'
-import { Skeleton } from '../components/ui/skeleton'
-import { formatAmount, formatLabel, riskTone } from '../lib/status'
+} from "../api/analytics";
+import { deleteRecoveryCase, getRecoveryCases } from "../api/recoveryCases";
+import type { RecoveryCase } from "../api/recoveryCases";
+import { getAuditLog, type AuditLogEntry } from "../api/audit";
+import { useAuth } from "../context/AuthContext";
+import { MetricCard } from "../components/dashboard/MetricCard";
+import { RecoveryCasesTable } from "../components/recovery/RecoveryCasesTable";
+import { StatusBadge } from "../components/ui/status-badge";
+import { Skeleton } from "../components/ui/skeleton";
+import { formatAmount, formatLabel, riskTone } from "../lib/status";
 
 interface DashboardProps {
-  showRecoveryCases?: boolean
+  showRecoveryCases?: boolean;
 }
 
-const POLL_INTERVAL_MS = 8000
+const POLL_INTERVAL_MS = 8000;
 
 function relativeTime(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const minutes = Math.round(diffMs / 60000)
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60000);
 
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
 
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
 
-  const days = Math.round(hours / 24)
-  return `${days}d ago`
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
 export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
-  const navigate = useNavigate()
-  const { token } = useAuth()
+  const navigate = useNavigate();
+  const { token } = useAuth();
 
   const [revenueAtRisk, setRevenueAtRisk] =
-    useState<RevenueAtRiskResponse | null>(null)
+    useState<RevenueAtRiskResponse | null>(null);
 
   const [revenueRecovered, setRevenueRecovered] =
-    useState<RevenueRecoveredResponse | null>(null)
+    useState<RevenueRecoveredResponse | null>(null);
 
-  const [summary, setSummary] =
-    useState<AnalyticsSummaryResponse | null>(null)
+  const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(null);
 
-  const [recoveryCases, setRecoveryCases] = useState<RecoveryCase[]>([])
-  const [attentionCases, setAttentionCases] = useState<RecoveryCase[]>([])
-  const [recentDecisions, setRecentDecisions] = useState<AuditLogEntry[]>([])
-  const [funnel, setFunnel] = useState<RecoveryFunnelResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [recoveryCases, setRecoveryCases] = useState<RecoveryCase[]>([]);
+  const [attentionCases, setAttentionCases] = useState<RecoveryCase[]>([]);
+  const [recentDecisions, setRecentDecisions] = useState<AuditLogEntry[]>([]);
+  const [funnel, setFunnel] = useState<RecoveryFunnelResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return
+    if (!token) return;
 
-    let cancelled = false
+    let cancelled = false;
 
     async function loadAnalytics(isInitialLoad: boolean) {
       try {
-        if (isInitialLoad) setError(null)
+        if (isInitialLoad) setError(null);
 
         const [
           risk,
@@ -90,88 +84,93 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           getAnalyticsSummary(token as string),
           getRecoveryCases(token as string, { limit: 5 }),
           getRecoveryCases(token as string, {
-            riskLevel: 'CRITICAL',
+            riskLevel: "CRITICAL",
             limit: 5,
           }),
           getRecoveryCases(token as string, {
-            status: 'ESCALATED',
+            status: "ESCALATED",
             limit: 5,
           }),
           getAuditLog(token as string, 1, 5),
           getRecoveryFunnel(token as string),
-        ])
+        ]);
 
-        if (cancelled) return
+        if (cancelled) return;
 
-        setRevenueAtRisk(risk)
-        setRevenueRecovered(recovered)
-        setSummary(summaryData)
-        setRecoveryCases(recoveryCasesData.data)
-        setFunnel(funnelData)
+        setRevenueAtRisk(risk);
+        setRevenueRecovered(recovered);
+        setSummary(summaryData);
+        setRecoveryCases(recoveryCasesData.data);
+        setFunnel(funnelData);
 
-        const merged = [...criticalCases.data, ...escalatedCases.data]
+        const merged = [...criticalCases.data, ...escalatedCases.data];
 
         const unique = Array.from(
           new Map(merged.map((item) => [item.id, item])).values(),
         )
-          .sort(
-            (a, b) =>
-              Number(b.revenueAtRisk) - Number(a.revenueAtRisk),
-          )
-          .slice(0, 5)
+          .sort((a, b) => Number(b.revenueAtRisk) - Number(a.revenueAtRisk))
+          .slice(0, 5);
 
-        setAttentionCases(unique)
+        setAttentionCases(unique);
 
         if (decisions) {
-          setRecentDecisions(decisions.data)
+          setRecentDecisions(decisions.data);
         }
       } catch (err) {
-        if (cancelled) return
+        if (cancelled) return;
 
         // A background poll failing transiently shouldn't blank out data
         // that's already on screen — only surface the error on first load.
         if (isInitialLoad) {
           setError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load analytics.',
-          )
+            err instanceof Error ? err.message : "Unable to load analytics.",
+          );
         }
       } finally {
-        if (!cancelled && isInitialLoad) setLoading(false)
+        if (!cancelled && isInitialLoad) setLoading(false);
       }
     }
 
-    loadAnalytics(true)
+    loadAnalytics(true);
 
-    const intervalId = setInterval(() => loadAnalytics(false), POLL_INTERVAL_MS)
+    const intervalId = setInterval(
+      () => loadAnalytics(false),
+      POLL_INTERVAL_MS,
+    );
 
     return () => {
-      cancelled = true
-      clearInterval(intervalId)
-    }
-  }, [token])
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [token]);
 
-  const atRiskAmount = Number(revenueAtRisk?.revenueAtRisk ?? 0)
-  const recoveredAmount = Number(
-    revenueRecovered?.revenueRecovered ?? 0,
-  )
+  async function handleDeleteRecoveryCase(recoveryCaseId: string) {
+    if (!token) return;
 
-  const totalEligible = atRiskAmount + recoveredAmount
+    await deleteRecoveryCase(token, recoveryCaseId);
+
+    setRecoveryCases((current) =>
+      current.filter((item) => item.id !== recoveryCaseId),
+    );
+    setAttentionCases((current) =>
+      current.filter((item) => item.id !== recoveryCaseId),
+    );
+  }
+
+  const atRiskAmount = Number(revenueAtRisk?.revenueAtRisk ?? 0);
+  const recoveredAmount = Number(revenueRecovered?.revenueRecovered ?? 0);
+
+  const totalEligible = atRiskAmount + recoveredAmount;
 
   const recoveryRate =
-    totalEligible > 0
-      ? Math.round((recoveredAmount / totalEligible) * 100)
-      : 0
+    totalEligible > 0 ? Math.round((recoveredAmount / totalEligible) * 100) : 0;
 
   const overviewSubtitle =
     !loading && !error && summary && revenueAtRisk
       ? `${summary.activeRecoveryCases} active recovery ${
-          summary.activeRecoveryCases === 1 ? 'case' : 'cases'
-        }, ${formatAmount(
-          revenueAtRisk.revenueAtRisk,
-        )} at risk right now.`
-      : 'Your recovery activity at a glance.'
+          summary.activeRecoveryCases === 1 ? "case" : "cases"
+        }, ${formatAmount(revenueAtRisk.revenueAtRisk)} at risk right now.`
+      : "Your recovery activity at a glance.";
 
   return (
     <section className="pb-12">
@@ -179,17 +178,13 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
       <header className="pt-1">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Recovery intelligence
-            </p>
-
             <h1 className="mt-1 text-2xl font-semibold tracking-[-0.025em] text-foreground sm:text-[28px]">
-              {showRecoveryCases ? 'Recovery Cases' : 'Overview'}
+              {showRecoveryCases ? "Recovery Cases" : "Overview"}
             </h1>
 
             <p className="mt-2 max-w-xl text-sm leading-5 text-muted-foreground">
               {showRecoveryCases
-                ? 'Review recovery cases requiring automated or human intervention.'
+                ? "Review recovery cases requiring automated or human intervention."
                 : overviewSubtitle}
             </p>
           </div>
@@ -197,9 +192,8 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           {!showRecoveryCases && !loading && !error && (
             <button
               type="button"
-              onClick={() => navigate('/recovery-cases')}
-              className="w-fit shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80"
-            >
+              onClick={() => navigate("/recovery-cases")}
+              className="w-fit shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80">
               View recovery cases →
             </button>
           )}
@@ -242,9 +236,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
             <MetricCard
               label="Revenue at risk"
-              value={formatAmount(
-                revenueAtRisk?.revenueAtRisk ?? 0,
-              )}
+              value={formatAmount(revenueAtRisk?.revenueAtRisk ?? 0)}
               description={`${revenueAtRisk?.recoveryCases ?? 0} active recovery cases`}
               icon={ShieldAlert}
               tone="amber"
@@ -252,9 +244,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
 
             <MetricCard
               label="Revenue recovered"
-              value={formatAmount(
-                revenueRecovered?.revenueRecovered ?? 0,
-              )}
+              value={formatAmount(revenueRecovered?.revenueRecovered ?? 0)}
               description={`${revenueRecovered?.successfulRecoveries ?? 0} successful recoveries`}
               icon={CircleDollarSign}
               tone="emerald"
@@ -292,26 +282,22 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
                 <span
                   className={
                     summary?.failedActions
-                      ? 'text-sm font-semibold text-destructive'
-                      : 'text-sm font-semibold text-foreground'
-                  }
-                >
+                      ? "text-sm font-semibold text-destructive"
+                      : "text-sm font-semibold text-foreground"
+                  }>
                   {summary?.failedActions ?? 0}
                 </span>
 
-                <span className="text-sm text-muted-foreground">
-                  failed
-                </span>
+                <span className="text-sm text-muted-foreground">failed</span>
               </div>
 
               <div className="flex items-center gap-2">
                 <span
                   className={
                     summary?.escalations
-                      ? 'text-sm font-semibold text-foreground'
-                      : 'text-sm font-semibold text-muted-foreground'
-                  }
-                >
+                      ? "text-sm font-semibold text-foreground"
+                      : "text-sm font-semibold text-muted-foreground"
+                  }>
                   {summary?.escalations ?? 0}
                 </span>
 
@@ -342,7 +328,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
                   </div>
 
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {formatAmount(recoveredAmount)} recovered of{' '}
+                    {formatAmount(recoveredAmount)} recovered of{" "}
                     {formatAmount(totalEligible)} eligible revenue
                   </p>
                 </div>
@@ -357,8 +343,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
 
                   <div
                     className="h-2 overflow-hidden rounded-full bg-secondary"
-                    aria-label={`Recovery rate ${recoveryRate}%`}
-                  >
+                    aria-label={`Recovery rate ${recoveryRate}%`}>
                     <div
                       className="h-full rounded-full bg-primary transition-all duration-700"
                       style={{ width: `${recoveryRate}%` }}
@@ -389,9 +374,8 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
 
                 <button
                   type="button"
-                  onClick={() => navigate('/recovery-cases')}
-                  className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80"
-                >
+                  onClick={() => navigate("/recovery-cases")}
+                  className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80">
                   View all
                 </button>
               </div>
@@ -409,31 +393,23 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
                       key={recoveryCase.id}
                       type="button"
                       onClick={() =>
-                        navigate(
-                          `/recovery-cases/${recoveryCase.id}`,
-                        )
+                        navigate(`/recovery-cases/${recoveryCase.id}`)
                       }
-                      className="group flex w-full items-center justify-between gap-4 rounded-lg border border-border/80 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-secondary/40"
-                    >
+                      className="group flex w-full items-center justify-between gap-4 rounded-lg border border-border/80 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-secondary/40">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-foreground">
-                          {recoveryCase.customer?.name ?? 'Unknown customer'}
+                          {recoveryCase.customer?.name ?? "Unknown customer"}
                         </div>
 
                         <div className="mt-0.5 text-xs text-muted-foreground">
-                          {formatAmount(
-                            recoveryCase.revenueAtRisk,
-                          )}{' '}
-                          at risk
+                          {formatAmount(recoveryCase.revenueAtRisk)} at risk
                         </div>
                       </div>
 
                       <div className="flex shrink-0 items-center gap-3">
                         <StatusBadge
                           label={recoveryCase.riskLevel}
-                          tone={riskTone(
-                            recoveryCase.riskLevel,
-                          )}
+                          tone={riskTone(recoveryCase.riskLevel)}
                         />
 
                         <span className="text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100">
@@ -461,9 +437,8 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
 
                 <button
                   type="button"
-                  onClick={() => navigate('/agent-activity')}
-                  className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80"
-                >
+                  onClick={() => navigate("/agent-activity")}
+                  className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80">
                   View all
                 </button>
               </div>
@@ -485,8 +460,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
                   {recentDecisions.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
-                    >
+                      className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
                           <TrendingUp size={14} />
@@ -517,11 +491,12 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
             onOpenRecoveryCase={(recoveryCaseId) =>
               navigate(`/recovery-cases/${recoveryCaseId}`)
             }
+            onDeleteRecoveryCase={handleDeleteRecoveryCase}
           />
         </div>
       )}
     </section>
-  )
+  );
 }
 
 /**
@@ -532,18 +507,33 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
  */
 function RecoveryFunnelBar({ funnel }: { funnel: RecoveryFunnelResponse }) {
   const stages = [
-    { key: 'detected', label: 'Detected', value: funnel.detected, tone: 'sky' },
-    { key: 'inProgress', label: 'Vidur working', value: funnel.inProgress, tone: 'amber' },
-    { key: 'escalated', label: 'Escalated', value: funnel.escalated, tone: 'rose' },
-    { key: 'recovered', label: 'Recovered', value: funnel.recovered, tone: 'emerald' },
-  ] as const
+    { key: "detected", label: "Detected", value: funnel.detected, tone: "sky" },
+    {
+      key: "inProgress",
+      label: "Vidur working",
+      value: funnel.inProgress,
+      tone: "amber",
+    },
+    {
+      key: "escalated",
+      label: "Escalated",
+      value: funnel.escalated,
+      tone: "rose",
+    },
+    {
+      key: "recovered",
+      label: "Recovered",
+      value: funnel.recovered,
+      tone: "emerald",
+    },
+  ] as const;
 
-  const toneClasses: Record<(typeof stages)[number]['tone'], string> = {
-    sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-    amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-    emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  }
+  const toneClasses: Record<(typeof stages)[number]["tone"], string> = {
+    sky: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  };
 
   return (
     <div className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
@@ -554,8 +544,7 @@ function RecoveryFunnelBar({ funnel }: { funnel: RecoveryFunnelResponse }) {
         {stages.map((stage) => (
           <div
             key={stage.key}
-            className={`rounded-xl px-4 py-3 ${toneClasses[stage.tone]}`}
-          >
+            className={`rounded-xl px-4 py-3 ${toneClasses[stage.tone]}`}>
             <p className="text-2xl font-semibold tracking-[-0.02em]">
               {stage.value}
             </p>
@@ -566,5 +555,5 @@ function RecoveryFunnelBar({ funnel }: { funnel: RecoveryFunnelResponse }) {
         ))}
       </div>
     </div>
-  )
+  );
 }

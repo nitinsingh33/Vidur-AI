@@ -70,6 +70,25 @@ export interface CreateSubscriptionResult {
   currency: string
 }
 
+export async function deleteSubscription(
+  token: string,
+  subscriptionId: string,
+): Promise<{ deleted: true; id: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/subscriptions/${subscriptionId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
 export async function createSubscription(
   token: string,
   payload: CreateSubscriptionPayload,

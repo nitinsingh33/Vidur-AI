@@ -59,6 +59,22 @@ export interface CreateInvoicePayload {
   dueDate: string
 }
 
+export async function deleteInvoice(
+  token: string,
+  invoiceId: string,
+): Promise<{ deleted: true; id: string }> {
+  const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
 export async function createInvoice(
   token: string,
   payload: CreateInvoicePayload,

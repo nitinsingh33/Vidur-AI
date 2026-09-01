@@ -1,5 +1,6 @@
 import type { RecoveryCase } from '../../api/recoveryCases'
 import { StatusBadge } from '../ui/status-badge'
+import { DeleteButton } from '../ui/delete-button'
 import {
   caseStatusTone,
   riskTone,
@@ -12,6 +13,8 @@ import {
 interface RecoveryCasesTableProps {
   cases: RecoveryCase[]
   onOpenRecoveryCase: (recoveryCaseId: string) => void
+  /** Omit to hide the Delete column entirely (e.g. a read-only preview). */
+  onDeleteRecoveryCase?: (recoveryCaseId: string) => Promise<void>
 }
 
 function getLatestAction(recoveryCase: RecoveryCase) {
@@ -21,6 +24,7 @@ function getLatestAction(recoveryCase: RecoveryCase) {
 export function RecoveryCasesTable({
   cases,
   onOpenRecoveryCase,
+  onDeleteRecoveryCase,
 }: RecoveryCasesTableProps) {
   return (
     <section className="rounded-xl border border-border bg-card">
@@ -58,6 +62,9 @@ export function RecoveryCasesTable({
                 <th className="px-3 py-3 font-medium">Risk</th>
                 <th className="px-3 py-3 font-medium">Status</th>
                 <th className="px-3 py-3 font-medium">Latest action</th>
+                {onDeleteRecoveryCase && (
+                  <th className="px-3 py-3 font-medium">Actions</th>
+                )}
               </tr>
             </thead>
 
@@ -153,6 +160,18 @@ export function RecoveryCasesTable({
                         </span>
                       )}
                     </td>
+
+                    {onDeleteRecoveryCase && (
+                      <td className="px-3 py-3.5">
+                        <DeleteButton
+                          size="sm"
+                          stopPropagation
+                          onConfirm={() =>
+                            onDeleteRecoveryCase(recoveryCase.id)
+                          }
+                        />
+                      </td>
+                    )}
                   </tr>
                 )
               })}

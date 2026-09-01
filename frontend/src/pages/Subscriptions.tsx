@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import {
   createSubscription,
+  deleteSubscription,
   getSubscriptions,
   type CreateSubscriptionResult,
   type Subscription,
@@ -25,6 +26,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Skeleton } from '../components/ui/skeleton'
 import { StatusBadge } from '../components/ui/status-badge'
+import { DeleteButton } from '../components/ui/delete-button'
 import {
   actionStatusTone,
   caseStatusTone,
@@ -87,6 +89,16 @@ export function Subscriptions() {
     if (!token) return
     const data = await getSubscriptions(token)
     setSubscriptions(data)
+  }
+
+  async function handleDeleteSubscription(subscriptionId: string) {
+    if (!token) return
+
+    await deleteSubscription(token, subscriptionId)
+
+    setSubscriptions((current) =>
+      current.filter((item) => item.id !== subscriptionId),
+    )
   }
 
   async function handleCreateSubscription(event: FormEvent) {
@@ -412,6 +424,7 @@ export function Subscriptions() {
                       <th className="px-3 py-3 font-medium">Failed charges</th>
                       <th className="px-3 py-3 font-medium">Latest action</th>
                       <th className="px-3 py-3 font-medium">Case</th>
+                      <th className="px-3 py-3 font-medium">Actions</th>
                     </tr>
                   </thead>
 
@@ -489,6 +502,16 @@ export function Subscriptions() {
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
+                          </td>
+
+                          <td className="px-3 py-3.5">
+                            <DeleteButton
+                              size="sm"
+                              stopPropagation
+                              onConfirm={() =>
+                                handleDeleteSubscription(subscription.id)
+                              }
+                            />
                           </td>
                         </tr>
                       )

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
 import { CreateMandateDto } from './dto/create-mandate.dto';
+import { deleteRecoveryCasesCascade } from '../recovery/recovery-case-cleanup.util';
 
 const DEFAULT_VALID_MONTHS = 36;
 
@@ -80,5 +81,40 @@ export class MandatesService {
     }
 
     return mandate;
+  }
+
+  /**
+   * Deletes this mandate plus any recovery case(s) opened against it. Any
+   * Order that referenced this mandate (registration/re-presentment
+   * attempts) simply loses that reference (Order.mandateId is a SetNull
+   * relation) rather than being deleted itself — those orders are their own
+   * transactional record. Never calls Razorpay to cancel the underlying
+   * token; this only clears Vidur's local record and its recovery history.
+   */
+  async delete(id: string, merchantId: string) {
+    const mandate = await this.prisma.mandate.findUnique({
+      where: { id },
+      select: { id: true, merchantId: true },
+    });
+
+    if (!mandate || mandate.merchantId !== merchantId) {
+      throw new NotFoundException(`Mandate ${id} not found.`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const cases = await tx.recoveryCase.findMany({
+        where: { mandateId: id },
+        select: { id: true },
+      });
+
+      await deleteRecoveryCasesCascade(
+        tx,
+        cases.map((item) => item.id),
+      );
+
+      await tx.mandate.delete({ where: { id } });
+    });
+
+    return { deleted: true, id };
   }
 }

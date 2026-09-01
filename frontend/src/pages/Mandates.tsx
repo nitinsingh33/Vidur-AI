@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import {
   createMandate,
+  deleteMandate,
   getMandates,
   runMandateRetrySequencer,
   type Mandate,
@@ -27,6 +28,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Skeleton } from '../components/ui/skeleton'
 import { StatusBadge } from '../components/ui/status-badge'
+import { DeleteButton } from '../components/ui/delete-button'
 import {
   actionStatusTone,
   caseStatusTone,
@@ -147,6 +149,14 @@ export function Mandates() {
     const data = await getMandates(token)
     setMandates(data)
     setNowMs(Date.now())
+  }
+
+  async function handleDeleteMandate(mandateId: string) {
+    if (!token) return
+
+    await deleteMandate(token, mandateId)
+
+    setMandates((current) => current.filter((item) => item.id !== mandateId))
   }
 
   async function handleCreateMandate(event: FormEvent) {
@@ -558,6 +568,7 @@ export function Mandates() {
                       <th className="px-3 py-3 font-medium">Retry eligibility</th>
                       <th className="px-3 py-3 font-medium">Latest action</th>
                       <th className="px-3 py-3 font-medium">Case</th>
+                      <th className="px-3 py-3 font-medium">Actions</th>
                     </tr>
                   </thead>
 
@@ -663,6 +674,14 @@ export function Mandates() {
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
+                          </td>
+
+                          <td className="px-3 py-3.5">
+                            <DeleteButton
+                              size="sm"
+                              stopPropagation
+                              onConfirm={() => handleDeleteMandate(mandate.id)}
+                            />
                           </td>
                         </tr>
                       )
