@@ -75,3 +75,9 @@ scratch/
 # Prisma Generated Client
 src/generated/
 generated/
+
+
+# dev-tool config, not part of the application or its setup.
+.claude/
+.agents/
+skills-lock.json
