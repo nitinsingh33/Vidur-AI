@@ -60,10 +60,12 @@ def generate_diagnosis(context: dict[str, Any]) -> str | None:
 
     On a rate-limit (429) response specifically, retries up to MAX_RETRIES
     times with exponential backoff plus jitter before giving up. Any other
-    error (bad key, invalid model, network failure, etc.) fails immediately,
-    exactly as before — retrying those would not help and would only add
-    latency. Never fabricates a response: if every attempt fails, returns
-    None per the existing best-effort contract.
+    error (bad key, invalid model, network failure, etc.) fails immediately
+    — retrying those would not help and would only add latency. If every
+    retry on GEMINI_MODEL is still rate-limited, makes exactly one further
+    attempt against GEMINI_FALLBACK_MODEL — a separate model with its own
+    quota pool — before giving up. Never fabricates a response: if every
+    attempt fails, returns None per the existing best-effort contract.
     """
     try:
         client = _get_client()
@@ -72,6 +74,7 @@ def generate_diagnosis(context: dict[str, Any]) -> str | None:
         return None
 
     prompt = _build_prompt(context)
+    primary_exhausted_on_rate_limit = False
 
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -91,12 +94,44 @@ def generate_diagnosis(context: dict[str, Any]) -> str | None:
                 f"failed (category={category}, type={type(error).__name__})"
             )
 
-            if not rate_limited or attempt == MAX_RETRIES:
+            if not rate_limited:
                 return None
+
+            if attempt == MAX_RETRIES:
+                primary_exhausted_on_rate_limit = True
+                break
 
             backoff_seconds = BASE_BACKOFF_SECONDS * (2**attempt) + random.uniform(
                 0, 0.25
             )
             time.sleep(backoff_seconds)
 
-    return None
+    if (
+        not primary_exhausted_on_rate_limit
+        or not config.GEMINI_FALLBACK_MODEL
+        or config.GEMINI_FALLBACK_MODEL == config.GEMINI_MODEL
+    ):
+        return None
+
+    try:
+        response = client.models.generate_content(
+            model=config.GEMINI_FALLBACK_MODEL,
+            contents=prompt,
+        )
+
+        text = response.text
+
+        if text:
+            print(
+                f"[llm] diagnosis generated via fallback model "
+                f"{config.GEMINI_FALLBACK_MODEL} after {config.GEMINI_MODEL} "
+                "was rate-limited on every retry."
+            )
+
+        return text.strip() if text else None
+    except Exception as error:
+        print(
+            f"[llm] fallback model {config.GEMINI_FALLBACK_MODEL} also failed "
+            f"(type={type(error).__name__})"
+        )
+        return None

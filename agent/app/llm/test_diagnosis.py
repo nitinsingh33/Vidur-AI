@@ -78,8 +78,8 @@ def test_429_then_success_on_retry():
         assert mock_sleep.call_count == 1
 
 
-def test_repeated_429_returns_none_without_crashing():
-    """(c) Every attempt 429s -> None, bounded to MAX_RETRIES, no exception raised."""
+def test_repeated_429_falls_back_then_gives_up_without_crashing():
+    """(c) Primary model 429s on every retry, fallback model also 429s -> None."""
     _reset_client()
 
     with patch.object(diagnosis.config, "GEMINI_API_KEY", "fake-key"), patch(
@@ -91,9 +91,56 @@ def test_repeated_429_returns_none_without_crashing():
         result = diagnosis.generate_diagnosis(CONTEXT)
 
         assert result is None
-        # Bounded: exactly MAX_RETRIES + 1 attempts, never more.
-        assert instance.models.generate_content.call_count == diagnosis.MAX_RETRIES + 1
+        # Bounded: MAX_RETRIES + 1 attempts on the primary model, plus
+        # exactly one further attempt on the fallback model, never more.
+        assert (
+            instance.models.generate_content.call_count
+            == diagnosis.MAX_RETRIES + 2
+        )
         assert mock_sleep.call_count == diagnosis.MAX_RETRIES
+
+
+def test_repeated_429_recovers_via_fallback_model():
+    """Primary model 429s on every retry, fallback model succeeds."""
+    _reset_client()
+
+    with patch.object(diagnosis.config, "GEMINI_API_KEY", "fake-key"), patch.object(
+        diagnosis.config, "GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite"
+    ), patch("app.llm.diagnosis.genai.Client") as MockClient, patch(
+        "app.llm.diagnosis.time.sleep"
+    ):
+        instance = MockClient.return_value
+        instance.models.generate_content.side_effect = [
+            _rate_limit_error(),
+            _rate_limit_error(),
+            _rate_limit_error(),
+            _make_response("Recovered via fallback model."),
+        ]
+
+        result = diagnosis.generate_diagnosis(CONTEXT)
+
+        assert result == "Recovered via fallback model."
+
+        last_call_kwargs = instance.models.generate_content.call_args_list[-1].kwargs
+        assert last_call_kwargs["model"] == "gemini-2.5-flash-lite"
+
+
+def test_fallback_not_attempted_when_same_as_primary_model():
+    """No wasted extra call when GEMINI_FALLBACK_MODEL isn't actually different."""
+    _reset_client()
+
+    with patch.object(diagnosis.config, "GEMINI_API_KEY", "fake-key"), patch.object(
+        diagnosis.config, "GEMINI_FALLBACK_MODEL", diagnosis.config.GEMINI_MODEL
+    ), patch("app.llm.diagnosis.genai.Client") as MockClient, patch(
+        "app.llm.diagnosis.time.sleep"
+    ):
+        instance = MockClient.return_value
+        instance.models.generate_content.side_effect = _rate_limit_error()
+
+        result = diagnosis.generate_diagnosis(CONTEXT)
+
+        assert result is None
+        assert instance.models.generate_content.call_count == diagnosis.MAX_RETRIES + 1
 
 
 def test_non_429_error_fails_fast_without_retry():
@@ -129,7 +176,9 @@ if __name__ == "__main__":
     tests = [
         ("test_successful_diagnosis_first_attempt", test_successful_diagnosis_first_attempt),
         ("test_429_then_success_on_retry", test_429_then_success_on_retry),
-        ("test_repeated_429_returns_none_without_crashing", test_repeated_429_returns_none_without_crashing),
+        ("test_repeated_429_falls_back_then_gives_up_without_crashing", test_repeated_429_falls_back_then_gives_up_without_crashing),
+        ("test_repeated_429_recovers_via_fallback_model", test_repeated_429_recovers_via_fallback_model),
+        ("test_fallback_not_attempted_when_same_as_primary_model", test_fallback_not_attempted_when_same_as_primary_model),
         ("test_non_429_error_fails_fast_without_retry", test_non_429_error_fails_fast_without_retry),
     ]
 

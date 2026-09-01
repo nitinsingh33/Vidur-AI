@@ -30,6 +30,8 @@ interface DashboardProps {
   showRecoveryCases?: boolean
 }
 
+const POLL_INTERVAL_MS = 8000
+
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime()
   const minutes = Math.round(diffMs / 60000)
@@ -67,9 +69,11 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
   useEffect(() => {
     if (!token) return
 
-    async function loadAnalytics() {
+    let cancelled = false
+
+    async function loadAnalytics(isInitialLoad: boolean) {
       try {
-        setError(null)
+        if (isInitialLoad) setError(null)
 
         const [
           risk,
@@ -97,6 +101,8 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           getRecoveryFunnel(token as string),
         ])
 
+        if (cancelled) return
+
         setRevenueAtRisk(risk)
         setRevenueRecovered(recovered)
         setSummary(summaryData)
@@ -120,17 +126,30 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           setRecentDecisions(decisions.data)
         }
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : 'Unable to load analytics.',
-        )
+        if (cancelled) return
+
+        // A background poll failing transiently shouldn't blank out data
+        // that's already on screen — only surface the error on first load.
+        if (isInitialLoad) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load analytics.',
+          )
+        }
       } finally {
-        setLoading(false)
+        if (!cancelled && isInitialLoad) setLoading(false)
       }
     }
 
-    loadAnalytics()
+    loadAnalytics(true)
+
+    const intervalId = setInterval(() => loadAnalytics(false), POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
   }, [token])
 
   const atRiskAmount = Number(revenueAtRisk?.revenueAtRisk ?? 0)

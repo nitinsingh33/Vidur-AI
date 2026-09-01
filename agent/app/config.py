@@ -11,6 +11,12 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:3000")
 ML_SERVICE_URL = os.environ.get("ML_SERVICE_URL", "http://localhost:8001")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+# Used only when GEMINI_MODEL is rate-limited (429) on every retry — a
+# smaller, separately-quota'd model so a diagnosis still has a chance to
+# generate instead of giving up entirely. Never used for anything else.
+GEMINI_FALLBACK_MODEL = os.environ.get(
+    "GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite"
+)
 # Text-to-speech-capable Gemini model used only for the Hinglish voice
 # message channel (see app/llm/voice_message.py). Independent from
 # GEMINI_MODEL since not every Gemini model supports audio output.
