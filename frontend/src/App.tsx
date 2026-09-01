@@ -1,5 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useState } from 'react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 
 import { AuthProvider } from './context/AuthContext'
@@ -40,52 +40,6 @@ import { CartPage } from './pages/store/CartPage'
 import { CheckoutPage } from './pages/store/CheckoutPage'
 
 import './index.css'
-
-function DocumentTitle() {
-  const { pathname } = useLocation()
-
-  useEffect(() => {
-    if (pathname === '/dashboard') {
-      document.title = 'Vidur Dashboard'
-      return
-    }
-
-    if (pathname.startsWith('/store/')) {
-      document.title = 'FashionKart'
-      return
-    }
-
-    const titleByPath: Array<[string, string]> = [
-      ['/recovery-cases/', 'Recovery Case | Vidur AI'],
-      ['/recovery-cases', 'Recovery Cases | Vidur AI'],
-      ['/batches', 'Recovery Batches | Vidur AI'],
-      ['/checkout-dropoff', 'Checkout Drop-off | Vidur AI'],
-      ['/receivables', 'Receivables | Vidur AI'],
-      ['/promise-to-pay', 'Promise to Pay | Vidur AI'],
-      ['/subscriptions', 'Subscriptions | Vidur AI'],
-      ['/mandates', 'Mandates | Vidur AI'],
-      ['/agent-activity', 'AI Activity | Vidur AI'],
-      ['/analytics', 'Analytics | Vidur AI'],
-      ['/policies', 'Recovery Policies | Vidur AI'],
-      ['/settings', 'Settings | Vidur AI'],
-      ['/demo-detection', 'Razorpay Live Demo | Vidur AI'],
-      ['/recovery-lab', 'Recovery Lab | Vidur AI'],
-      ['/login', 'Sign in | Vidur AI'],
-      ['/signup', 'Create workspace | Vidur AI'],
-      ['/product', 'Product | Vidur AI'],
-      ['/solutions', 'Solutions | Vidur AI'],
-      ['/how-it-works', 'How It Works | Vidur AI'],
-      ['/developers', 'Developers | Vidur AI'],
-      ['/pricing', 'Pricing | Vidur AI'],
-      ['/', 'Vidur AI'],
-    ]
-
-    const match = titleByPath.find(([path]) => pathname === path || pathname.startsWith(path))
-    document.title = match?.[1] ?? 'Vidur AI'
-  }, [pathname])
-
-  return null
-}
 
 function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -198,7 +152,7 @@ function AppShell() {
         </main>
 
         <footer className="border-t border-border">
-          <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 text-center sm:flex-row sm:px-6 sm:text-left lg:px-10">
+          <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 text-center sm:flex-row sm:text-left lg:px-10">
             <span className="text-xs text-muted-foreground">
               © 2026 Vidur AI
             </span>
@@ -218,7 +172,6 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
-        <DocumentTitle />
 
         <Routes>
           {/* ───────────────── Public marketing ───────────────── */}
