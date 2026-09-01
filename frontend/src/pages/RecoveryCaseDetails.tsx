@@ -26,6 +26,8 @@ import {
   formatAmount,
   formatLabel,
   policyTone,
+  recoveryCaseCategory,
+  recoveryCaseCategoryMeta,
   riskTone,
 } from "../lib/status";
 
@@ -121,6 +123,9 @@ export function RecoveryCaseDetails() {
     Number(recoveryCase.recoveryProbability) * 100,
   );
 
+  const category = recoveryCaseCategory(recoveryCase);
+  const categoryMeta = recoveryCaseCategoryMeta(category);
+
   return (
     <section className="mx-auto max-w-6xl pb-14">
       {/* Breadcrumb */}
@@ -140,7 +145,7 @@ export function RecoveryCaseDetails() {
           <div className="flex items-center gap-2">
             <span className="size-1.5 rounded-full bg-primary" />
             <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-primary">
-              Recovery case
+              {categoryMeta.label}
             </p>
           </div>
 
@@ -219,7 +224,7 @@ export function RecoveryCaseDetails() {
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
-            Identified from payment failure data
+            {categoryMeta.caption}
           </p>
         </div>
       </div>

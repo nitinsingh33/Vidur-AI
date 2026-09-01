@@ -134,3 +134,69 @@ export function subscriptionStatusTone(status: string): Tone {
 export function mandateStatusTone(status: string): Tone {
   return MANDATE_STATUS_TONE[status] ?? 'neutral'
 }
+
+export type RecoveryCaseCategory =
+  | 'CHECKOUT_ABANDONMENT'
+  | 'PAYMENT_FAILURE'
+  | 'SUBSCRIPTION_FAILURE'
+  | 'RECEIVABLE_OVERDUE'
+  | 'MANDATE_FAILURE'
+
+interface RecoveryCaseLinks {
+  payment?: unknown
+  subscription?: unknown
+  invoice?: unknown
+  mandate?: unknown
+}
+
+/**
+ * A case's category is derived from which record is actually attached, not
+ * from the free-text rootCause string — a checkout-abandonment case that
+ * later gets a real failed payment linked (see
+ * RazorpayWebhookService.handleWebhook's existingOrderCase branch) correctly
+ * flips to PAYMENT_FAILURE here too, matching that re-classification.
+ */
+export function recoveryCaseCategory(
+  recoveryCase: RecoveryCaseLinks,
+): RecoveryCaseCategory {
+  if (recoveryCase.payment) return 'PAYMENT_FAILURE'
+  if (recoveryCase.subscription) return 'SUBSCRIPTION_FAILURE'
+  if (recoveryCase.invoice) return 'RECEIVABLE_OVERDUE'
+  if (recoveryCase.mandate) return 'MANDATE_FAILURE'
+  return 'CHECKOUT_ABANDONMENT'
+}
+
+const CATEGORY_META: Record<
+  RecoveryCaseCategory,
+  { label: string; caption: string; tone: Tone }
+> = {
+  CHECKOUT_ABANDONMENT: {
+    label: 'Checkout abandonment',
+    caption: 'Customer left checkout before attempting to pay.',
+    tone: 'sky',
+  },
+  PAYMENT_FAILURE: {
+    label: 'Payment failure',
+    caption: 'Identified from a real, failed payment attempt.',
+    tone: 'rose',
+  },
+  SUBSCRIPTION_FAILURE: {
+    label: 'Subscription failure',
+    caption: 'A recurring billing charge failed to go through.',
+    tone: 'amber',
+  },
+  RECEIVABLE_OVERDUE: {
+    label: 'Receivable overdue',
+    caption: 'An invoice has passed its due date unpaid.',
+    tone: 'amber',
+  },
+  MANDATE_FAILURE: {
+    label: 'Mandate failure',
+    caption: 'An autopay mandate registration or debit failed.',
+    tone: 'rose',
+  },
+}
+
+export function recoveryCaseCategoryMeta(category: RecoveryCaseCategory) {
+  return CATEGORY_META[category]
+}

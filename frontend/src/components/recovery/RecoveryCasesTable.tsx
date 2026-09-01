@@ -1,6 +1,13 @@
 import type { RecoveryCase } from '../../api/recoveryCases'
 import { StatusBadge } from '../ui/status-badge'
-import { caseStatusTone, riskTone, formatAmount, formatLabel } from '../../lib/status'
+import {
+  caseStatusTone,
+  riskTone,
+  formatAmount,
+  formatLabel,
+  recoveryCaseCategory,
+  recoveryCaseCategoryMeta,
+} from '../../lib/status'
 
 interface RecoveryCasesTableProps {
   cases: RecoveryCase[]
@@ -44,6 +51,7 @@ export function RecoveryCasesTable({
             <thead>
               <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3 font-medium">Customer</th>
+                <th className="px-3 py-3 font-medium">Type</th>
                 <th className="px-3 py-3 font-medium">Payment</th>
                 <th className="px-3 py-3 font-medium">At risk</th>
                 <th className="px-3 py-3 font-medium">Probability</th>
@@ -56,6 +64,8 @@ export function RecoveryCasesTable({
             <tbody>
               {cases.map((recoveryCase) => {
                 const latestAction = getLatestAction(recoveryCase)
+                const category = recoveryCaseCategory(recoveryCase)
+                const categoryMeta = recoveryCaseCategoryMeta(category)
 
                 return (
                   <tr
@@ -72,6 +82,13 @@ export function RecoveryCasesTable({
                           {recoveryCase.customer?.email ?? 'No contact info'}
                         </span>
                       </div>
+                    </td>
+
+                    <td className="px-3 py-3.5">
+                      <StatusBadge
+                        label={categoryMeta.label}
+                        tone={categoryMeta.tone}
+                      />
                     </td>
 
                     <td className="px-3 py-3.5 text-muted-foreground">
