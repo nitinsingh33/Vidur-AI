@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { ScrollToTop } from './components/layout/ScrollToTop'
+import { DocumentTitle } from './components/layout/DocumentTitle'
 
 import { Landing } from './pages/Landing'
 import { Product } from './pages/Product'
@@ -173,6 +174,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <ScrollToTop />
+        <DocumentTitle />
 
         <Routes>
           {/* ───────────────── Public marketing ───────────────── */}
