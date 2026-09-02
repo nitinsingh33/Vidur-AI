@@ -1,18 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Circle,
-  CreditCard,
-  ExternalLink,
-  Loader2,
-  RotateCcw,
-} from 'lucide-react'
+import { CheckCircle2, Circle, CreditCard, ExternalLink, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import {
-  resetFashionKartDemoData,
-  type FashionKartResetSummary,
-} from '../api/demo'
 import {
   createRazorpayCheckoutOrder,
   getPaymentByExternalId,
@@ -21,6 +9,7 @@ import {
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { ResetDemoDataButton } from '../components/demo/ResetDemoDataButton'
 import { formatAmount, formatLabel } from '../lib/status'
 import { cn } from '../lib/utils'
 import { loadRazorpayCheckoutScript } from '../lib/razorpayCheckout'
@@ -67,11 +56,6 @@ export function DemoDetection() {
   const [liveError, setLiveError] = useState<string | null>(null)
   const [detectedPayment, setDetectedPayment] =
     useState<PaymentWithCase | null>(null)
-  const [resetting, setResetting] = useState(false)
-  const [confirmingReset, setConfirmingReset] = useState(false)
-  const [lastReset, setLastReset] = useState<FashionKartResetSummary | null>(
-    null,
-  )
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -131,7 +115,6 @@ export function DemoDetection() {
 
     setLiveError(null)
     setDetectedPayment(null)
-    setLastReset(null)
     stopPolling()
 
     const parsedAmount = Number(liveAmount)
@@ -203,26 +186,11 @@ export function DemoDetection() {
     }
   }
 
-  async function handleReset() {
-    if (!token) return
-
-    setResetting(true)
-    setConfirmingReset(false)
+  function handleReset() {
     setLiveError(null)
     setDetectedPayment(null)
     setLiveStage('idle')
     stopPolling()
-
-    try {
-      const result = await resetFashionKartDemoData(token)
-      setLastReset(result)
-    } catch (err) {
-      setLiveError(
-        err instanceof Error ? err.message : 'Failed to reset demo data.',
-      )
-    } finally {
-      setResetting(false)
-    }
   }
 
   const liveBusy =
@@ -272,73 +240,8 @@ export function DemoDetection() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setConfirmingReset(true)}
-          disabled={resetting || confirmingReset || !token}
-          className="shrink-0 gap-2"
-        >
-          {resetting ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <RotateCcw size={14} />
-          )}
-          Reset FashionKart demo
-        </Button>
+        <ResetDemoDataButton onReset={handleReset} className="shrink-0" />
       </header>
-
-      {confirmingReset && (
-        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-2.5">
-            <AlertTriangle
-              size={16}
-              className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
-            />
-            <p className="text-amber-800 dark:text-amber-300">
-              This permanently deletes FashionKart's demo orders, payments,
-              and recovery cases (and their actions/outcomes/promises/audit
-              entries). Products, policies, and the admin account are never
-              touched. This cannot be undone.
-            </p>
-          </div>
-
-          <div className="flex shrink-0 gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setConfirmingReset(false)}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleReset} disabled={resetting}>
-              {resetting && <Loader2 size={14} className="animate-spin" />}
-              Reset demo data
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {lastReset && (
-        <div className="mt-4 rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">
-            FashionKart demo data reset.
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
-            <span>{lastReset.ordersDeleted} order(s)</span>
-            <span>{lastReset.paymentsDeleted} payment(s)</span>
-            <span>{lastReset.paymentEventsDeleted} payment event(s)</span>
-            <span>{lastReset.subscriptionsDeleted} subscription(s)</span>
-            <span>{lastReset.invoicesDeleted} invoice(s)</span>
-            <span>{lastReset.mandatesDeleted} mandate(s)</span>
-            <span>{lastReset.recoveryCasesDeleted} recovery case(s)</span>
-            <span>{lastReset.recoveryActionsDeleted} action(s)</span>
-            <span>{lastReset.recoveryOutcomesDeleted} outcome(s)</span>
-            <span>{lastReset.promisesToPayDeleted} promise(s)</span>
-            <span>{lastReset.auditLogsDeleted} audit log(s)</span>
-          </div>
-        </div>
-      )}
 
       {liveError && (
         <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">

@@ -52,6 +52,11 @@ describe('RecoveryCasesService.delete', () => {
   const tx = {
     auditLog: { deleteMany: jest.fn() },
     recoveryCase: { deleteMany: jest.fn() },
+    payment: { deleteMany: jest.fn() },
+    order: { deleteMany: jest.fn() },
+    subscription: { deleteMany: jest.fn() },
+    invoice: { deleteMany: jest.fn() },
+    mandate: { deleteMany: jest.fn() },
   };
 
   const prisma = {
@@ -102,5 +107,89 @@ describe('RecoveryCasesService.delete', () => {
       where: { id: { in: ['case-1'] } },
     });
     expect(result).toEqual({ deleted: true, id: 'case-1' });
+  });
+
+  it('never deletes a real (non-demo) order/payment linked to the case', async () => {
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      merchantId: 'my-merchant',
+      order: { id: 'order-1', isDemoData: false },
+      payment: null,
+      subscription: null,
+      invoice: null,
+      mandate: null,
+    });
+
+    await service.delete('case-1', 'my-merchant');
+
+    expect(tx.order.deleteMany).not.toHaveBeenCalled();
+    expect(tx.payment.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes a demo checkout-abandonment case together with its now-orphaned Order, so the checkout sweep cannot resurrect it', async () => {
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      merchantId: 'my-merchant',
+      order: { id: 'order-1', isDemoData: true },
+      payment: null,
+      subscription: null,
+      invoice: null,
+      mandate: null,
+    });
+
+    await service.delete('case-1', 'my-merchant');
+
+    expect(tx.order.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+    });
+  });
+
+  it('deletes a demo payment-failure case together with its Payment and the Order it belongs to', async () => {
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      merchantId: 'my-merchant',
+      order: null,
+      payment: {
+        id: 'payment-1',
+        isDemoData: true,
+        order: { id: 'order-1', isDemoData: true },
+      },
+      subscription: null,
+      invoice: null,
+      mandate: null,
+    });
+
+    await service.delete('case-1', 'my-merchant');
+
+    expect(tx.payment.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'payment-1' },
+    });
+    expect(tx.order.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+    });
+  });
+
+  it('deletes a demo subscription/invoice/mandate linked to the case', async () => {
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      merchantId: 'my-merchant',
+      order: null,
+      payment: null,
+      subscription: { id: 'sub-1', isDemoData: true },
+      invoice: { id: 'invoice-1', isDemoData: true },
+      mandate: { id: 'mandate-1', isDemoData: true },
+    });
+
+    await service.delete('case-1', 'my-merchant');
+
+    expect(tx.subscription.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'sub-1' },
+    });
+    expect(tx.invoice.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'invoice-1' },
+    });
+    expect(tx.mandate.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'mandate-1' },
+    });
   });
 });

@@ -30,6 +30,7 @@ import { getAuditLog, type AuditLogEntry } from "../api/audit";
 import { useAuth } from "../context/AuthContext";
 import { MetricCard } from "../components/dashboard/MetricCard";
 import { RecoveryCasesTable } from "../components/recovery/RecoveryCasesTable";
+import { ResetDemoDataButton } from "../components/demo/ResetDemoDataButton";
 import { StatusBadge } from "../components/ui/status-badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { formatAmount, formatLabel, riskTone } from "../lib/status";
@@ -56,7 +57,8 @@ function relativeTime(iso: string) {
 
 export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
   const navigate = useNavigate();
-  const { token, merchant } = useAuth();
+  const { token, merchant, user } = useAuth();
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const [revenueAtRisk, setRevenueAtRisk] =
     useState<RevenueAtRiskResponse | null>(null);
@@ -161,7 +163,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [token]);
+  }, [token, refreshToken]);
 
   async function handleDeleteRecoveryCase(recoveryCaseId: string) {
     if (!token) return;
@@ -221,6 +223,13 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
               className="w-fit shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80">
               View recovery cases →
             </button>
+          )}
+
+          {showRecoveryCases && !loading && !error && user?.role === "ADMIN" && (
+            <ResetDemoDataButton
+              className="shrink-0"
+              onReset={() => setRefreshToken((current) => current + 1)}
+            />
           )}
         </div>
       </header>
