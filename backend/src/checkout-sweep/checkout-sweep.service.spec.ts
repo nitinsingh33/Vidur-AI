@@ -95,4 +95,29 @@ describe('CheckoutSweepService', () => {
     expect(riskService.assessOrderAbandonment).not.toHaveBeenCalled();
     expect(result).toEqual({ scanned: 0, opened: 0, caseIds: [] });
   });
+
+  describe('autoRun option', () => {
+    it('runs the automatic recovery pipeline on newly-opened cases by default', async () => {
+      (prisma.order.findMany as jest.Mock).mockResolvedValue([{ id: 'order-1' }]);
+      (riskService.assessOrderAbandonment as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+      });
+
+      await service.sweepOnce('merchant-1');
+
+      expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-1');
+    });
+
+    it('skips the automatic recovery pipeline when autoRun is false, e.g. from Recovery Lab', async () => {
+      (prisma.order.findMany as jest.Mock).mockResolvedValue([{ id: 'order-1' }]);
+      (riskService.assessOrderAbandonment as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+      });
+
+      const result = await service.sweepOnce('merchant-1', { autoRun: false });
+
+      expect(autoOrchestrator.runAutomaticRecovery).not.toHaveBeenCalled();
+      expect(result.caseIds).toEqual(['case-1']);
+    });
+  });
 });

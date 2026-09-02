@@ -2,6 +2,50 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecoveryCasesService } from './recovery-cases.service';
 
+describe('RecoveryCasesService — mandate relation included in reads', () => {
+  // Regression test: findAll/findOne previously omitted `mandate` from their
+  // Prisma `include`, so a real mandate-failure case silently rendered with
+  // no mandate data on the case detail page even though the frontend already
+  // has code to display it (RecoveryCaseDetails.tsx) and the category
+  // classifier (recoveryCaseCategory()) depends on `mandate` being present
+  // to correctly label the case as MANDATE_FAILURE instead of falling
+  // through to CHECKOUT_ABANDONMENT.
+  let service: RecoveryCasesService;
+
+  const prisma = {
+    recoveryCase: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      findUnique: jest.fn().mockResolvedValue({ id: 'case-1', merchantId: 'm1' }),
+    },
+  } as unknown as PrismaService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (prisma.recoveryCase.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.recoveryCase.count as jest.Mock).mockResolvedValue(0);
+    (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      merchantId: 'm1',
+    });
+    service = new RecoveryCasesService(prisma);
+  });
+
+  it('findAll includes the mandate relation', async () => {
+    await service.findAll({});
+
+    const call = (prisma.recoveryCase.findMany as jest.Mock).mock.calls[0][0];
+    expect(call.include.mandate).toBe(true);
+  });
+
+  it('findOne includes the mandate relation', async () => {
+    await service.findOne('case-1');
+
+    const call = (prisma.recoveryCase.findUnique as jest.Mock).mock.calls[0][0];
+    expect(call.include.mandate).toBe(true);
+  });
+});
+
 describe('RecoveryCasesService.delete', () => {
   let service: RecoveryCasesService;
 

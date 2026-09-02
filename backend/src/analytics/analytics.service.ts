@@ -275,4 +275,64 @@ export class AnalyticsService {
 
     return { detected, inProgress, escalated, recovered, exhausted };
   }
+
+  /**
+   * Counts active recovery cases per risk-signal category, using the exact
+   * same payment > subscription > invoice > mandate > (order) precedence as
+   * the frontend's recoveryCaseCategory() (frontend/src/lib/status.ts) — the
+   * two must classify a given case identically.
+   *
+   * Promise-to-pay is counted separately (PromiseToPay rows still PENDING)
+   * rather than as a RecoveryCase category, because a promise is a status
+   * layered on top of an already-open receivable-overdue case, not a
+   * distinct case category of its own.
+   */
+  async getRiskSignalBreakdown(merchantId?: string) {
+    const activeStatuses: RecoveryCaseStatus[] = [
+      RecoveryCaseStatus.OPEN,
+      RecoveryCaseStatus.ELIGIBLE,
+      RecoveryCaseStatus.IN_PROGRESS,
+      RecoveryCaseStatus.ESCALATED,
+    ];
+
+    const [cases, promiseToPayPending] = await Promise.all([
+      this.prisma.recoveryCase.findMany({
+        where: {
+          ...(merchantId && { merchantId }),
+          status: { in: activeStatuses },
+        },
+        select: {
+          paymentId: true,
+          subscriptionId: true,
+          invoiceId: true,
+          mandateId: true,
+        },
+      }),
+      this.prisma.promiseToPay.count({
+        where: {
+          ...(merchantId && { merchantId }),
+          status: 'PENDING',
+        },
+      }),
+    ]);
+
+    const breakdown = {
+      paymentFailure: 0,
+      subscriptionFailure: 0,
+      receivableOverdue: 0,
+      mandateFailure: 0,
+      checkoutAbandonment: 0,
+      promiseToPayPending,
+    };
+
+    for (const recoveryCase of cases) {
+      if (recoveryCase.paymentId) breakdown.paymentFailure += 1;
+      else if (recoveryCase.subscriptionId) breakdown.subscriptionFailure += 1;
+      else if (recoveryCase.invoiceId) breakdown.receivableOverdue += 1;
+      else if (recoveryCase.mandateId) breakdown.mandateFailure += 1;
+      else breakdown.checkoutAbandonment += 1;
+    }
+
+    return breakdown;
+  }
 }

@@ -19,6 +19,10 @@ export interface FinalOutcome {
   kind: 'recovered' | 'escalated'
   label: string
   detail: string
+  /** The recovered ₹ figure, formatted — present only when kind is
+   * 'recovered' and a real RecoveryOutcome exists, so the UI can show it as
+   * a prominent number rather than parsing it out of `detail`'s prose. */
+  amount?: string
 }
 
 export type GuardrailStatus = 'met' | 'not-applicable' | 'pending'
@@ -254,6 +258,9 @@ export function deriveAgentPipeline({
               recoveryCase.outcome.recoveryMethod,
             )}`
           : 'Payment recovered.',
+        amount: recoveryCase.outcome
+          ? formatAmount(recoveryCase.outcome.recoveredAmount)
+          : undefined,
       }
     } else {
       // Prefer the persisted policyDecision on the action over the

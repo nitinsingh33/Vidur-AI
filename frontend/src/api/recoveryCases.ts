@@ -68,6 +68,7 @@ export interface RecoveryCase {
     failureReason: string | null
     attemptNumber: number
     events?: PaymentEvent[]
+    isDemoData?: boolean
   } | null
 
   invoice?: {
@@ -76,6 +77,7 @@ export interface RecoveryCase {
     currency: string
     status: string
     dueDate: string
+    isDemoData?: boolean
   } | null
 
   order?: {
@@ -84,6 +86,7 @@ export interface RecoveryCase {
     currency: string
     status: string
     createdAt: string
+    isDemoData?: boolean
   } | null
 
   subscription?: {
@@ -93,6 +96,7 @@ export interface RecoveryCase {
     status: string
     failedPaymentCount: number
     nextBillingAt: string | null
+    isDemoData?: boolean
   } | null
 
   mandate?: {
@@ -102,6 +106,7 @@ export interface RecoveryCase {
     currency: string
     status: string
     failedDebitCount: number
+    isDemoData?: boolean
   } | null
 
   actions: RecoveryAction[]

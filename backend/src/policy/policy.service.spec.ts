@@ -146,6 +146,53 @@ describe('PolicyService', () => {
 
       expect(result.decision).toBe('ALLOW');
     });
+
+    it('reports attemptsUsed/attemptsLimit from maxRetries on an ALLOW decision', async () => {
+      (prisma.policy.findFirst as jest.Mock).mockResolvedValue({
+        id: 'policy-1',
+        decision: 'ALLOW',
+        maxAmount: null,
+        maxRetries: 3,
+        maxContacts: null,
+        retryIntervalMinutes: null,
+      });
+
+      const result = await service.check('merchant-1', 'RETRY_PAYMENT', 500, 1, 1);
+
+      expect(result.attemptsUsed).toBe(1);
+      expect(result.attemptsLimit).toBe(3);
+    });
+
+    it('reports attemptsUsed/attemptsLimit from maxContacts when that is the configured cap', async () => {
+      (prisma.policy.findFirst as jest.Mock).mockResolvedValue({
+        id: 'policy-1',
+        decision: 'ALLOW',
+        maxAmount: null,
+        maxRetries: null,
+        maxContacts: 3,
+        retryIntervalMinutes: null,
+      });
+
+      const result = await service.check(
+        'merchant-1',
+        'SEND_PAYMENT_LINK',
+        500,
+        2,
+        2,
+      );
+
+      expect(result.attemptsUsed).toBe(2);
+      expect(result.attemptsLimit).toBe(3);
+    });
+
+    it('omits attemptsUsed/attemptsLimit when no policy is configured at all', async () => {
+      (prisma.policy.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.check('merchant-1', 'RETRY_PAYMENT', 500, 0);
+
+      expect(result.attemptsUsed).toBeUndefined();
+      expect(result.attemptsLimit).toBeUndefined();
+    });
   });
 
   describe('syncDefaultPolicies', () => {
@@ -295,6 +342,41 @@ describe('PolicyService', () => {
 
       expect(result.decision).toBe('BLOCK');
       expect(result.reason).toMatch(/retry count/i);
+    });
+
+    it('records attemptsUsed/attemptsLimit on the POLICY_EVALUATED audit entry', async () => {
+      (prisma.recoveryCase.findUnique as jest.Mock).mockResolvedValue({
+        id: 'case-1',
+        merchantId: 'merchant-1',
+        status: 'IN_PROGRESS',
+        revenueAtRisk: '500',
+        payment: { amount: '500', attemptNumber: 1 },
+        outcome: null,
+      });
+      (prisma.recoveryAction.findMany as jest.Mock).mockResolvedValue([
+        { attemptedAt: new Date() },
+      ]);
+      (prisma.recoveryAction.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.policy.findFirst as jest.Mock).mockResolvedValue({
+        id: 'policy-1',
+        decision: 'ALLOW',
+        maxAmount: null,
+        maxRetries: null,
+        maxContacts: 3,
+        retryIntervalMinutes: null,
+      });
+
+      await service.checkForRecoveryCase('case-1', 'SEND_PAYMENT_LINK');
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'POLICY_EVALUATED',
+          details: expect.objectContaining({
+            attemptsUsed: 1,
+            attemptsLimit: 3,
+          }),
+        }),
+      );
     });
 
     it('honors a human approval and skips re-evaluating the raw limits', async () => {

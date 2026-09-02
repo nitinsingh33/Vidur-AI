@@ -115,7 +115,9 @@ describe('RecoveryLabService', () => {
         }),
       }),
     );
-    expect(checkoutSweepService.sweepOnce).toHaveBeenCalledWith('merchant-1');
+    expect(checkoutSweepService.sweepOnce).toHaveBeenCalledWith('merchant-1', {
+      autoRun: false,
+    });
     expect(riskService.assessPayment).not.toHaveBeenCalled();
     expect(result.recoveryCaseId).toBe('case-2');
   });
@@ -151,7 +153,10 @@ describe('RecoveryLabService', () => {
       expect.objectContaining({ customerId: 'lab-customer' }),
       { isDemoData: false },
     );
-    expect(invoiceOverdueSweepService.sweepOnce).toHaveBeenCalledWith('merchant-1');
+    expect(invoiceOverdueSweepService.sweepOnce).toHaveBeenCalledWith(
+      'merchant-1',
+      { autoRun: false },
+    );
     expect(result.recoveryCaseId).toBe('case-4');
   });
 

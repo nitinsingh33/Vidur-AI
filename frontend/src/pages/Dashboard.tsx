@@ -1,15 +1,28 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CircleDollarSign, ShieldAlert, TrendingUp, Users } from "lucide-react";
+import {
+  CircleDollarSign,
+  CreditCard,
+  FileText,
+  HandCoins,
+  Landmark,
+  Repeat,
+  ShieldAlert,
+  ShoppingCart,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import {
   getAnalyticsSummary,
   getRecoveryFunnel,
   getRevenueAtRisk,
   getRevenueRecovered,
+  getRiskSignalBreakdown,
   type AnalyticsSummaryResponse,
   type RecoveryFunnelResponse,
   type RevenueAtRiskResponse,
   type RevenueRecoveredResponse,
+  type RiskSignalBreakdownResponse,
 } from "../api/analytics";
 import { deleteRecoveryCase, getRecoveryCases } from "../api/recoveryCases";
 import type { RecoveryCase } from "../api/recoveryCases";
@@ -43,10 +56,13 @@ function relativeTime(iso: string) {
 
 export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, merchant } = useAuth();
 
   const [revenueAtRisk, setRevenueAtRisk] =
     useState<RevenueAtRiskResponse | null>(null);
+
+  const [riskSignals, setRiskSignals] =
+    useState<RiskSignalBreakdownResponse | null>(null);
 
   const [revenueRecovered, setRevenueRecovered] =
     useState<RevenueRecoveredResponse | null>(null);
@@ -78,6 +94,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           escalatedCases,
           decisions,
           funnelData,
+          riskSignalData,
         ] = await Promise.all([
           getRevenueAtRisk(token as string),
           getRevenueRecovered(token as string),
@@ -93,6 +110,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
           }),
           getAuditLog(token as string, 1, 5),
           getRecoveryFunnel(token as string),
+          getRiskSignalBreakdown(token as string),
         ]);
 
         if (cancelled) return;
@@ -102,6 +120,7 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
         setSummary(summaryData);
         setRecoveryCases(recoveryCasesData.data);
         setFunnel(funnelData);
+        setRiskSignals(riskSignalData);
 
         const merged = [...criticalCases.data, ...escalatedCases.data];
 
@@ -178,6 +197,12 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
       <header className="pt-1">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            {!showRecoveryCases && merchant?.name && (
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                {merchant.name}
+              </p>
+            )}
+
             <h1 className="mt-1 text-2xl font-semibold tracking-[-0.025em] text-foreground sm:text-[28px]">
               {showRecoveryCases ? "Recovery Cases" : "Overview"}
             </h1>
@@ -257,6 +282,111 @@ export function Dashboard({ showRecoveryCases = false }: DashboardProps) {
               icon={Users}
               tone="primary"
             />
+          </div>
+
+          {/* ───────────────────────── Risk Signals ───────────────────────── */}
+          <div className="mt-4 rounded-xl border border-border bg-card px-5 py-4">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Risk signals
+            </span>
+
+            <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+              <button
+                type="button"
+                onClick={() => navigate("/checkout-dropoff")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <CreditCard size={16} strokeWidth={1.8} className="shrink-0 text-rose-600" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.paymentFailure ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Payment failures
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/checkout-dropoff")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <ShoppingCart size={16} strokeWidth={1.8} className="shrink-0 text-sky-600" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.checkoutAbandonment ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Checkout abandonment
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/subscriptions")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <Repeat size={16} strokeWidth={1.8} className="shrink-0 text-amber-600" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.subscriptionFailure ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Subscription failures
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/receivables")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <FileText size={16} strokeWidth={1.8} className="shrink-0 text-amber-600" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.receivableOverdue ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Overdue invoices
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/mandates")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <Landmark size={16} strokeWidth={1.8} className="shrink-0 text-rose-600" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.mandateFailure ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Mandate failures
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/promise-to-pay")}
+                className="flex items-center gap-2.5 rounded-lg border border-border/70 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-secondary/40"
+              >
+                <HandCoins size={16} strokeWidth={1.8} className="shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">
+                    {riskSignals?.promiseToPayPending ?? "–"}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    Promise-to-pay pending
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* ───────────────────────── Operational Status ───────────────────────── */}

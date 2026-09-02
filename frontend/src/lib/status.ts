@@ -200,3 +200,30 @@ const CATEGORY_META: Record<
 export function recoveryCaseCategoryMeta(category: RecoveryCaseCategory) {
   return CATEGORY_META[category]
 }
+
+interface RecoveryCaseDemoLinks {
+  payment?: { isDemoData?: boolean } | null
+  subscription?: { isDemoData?: boolean } | null
+  invoice?: { isDemoData?: boolean } | null
+  mandate?: { isDemoData?: boolean } | null
+  order?: { isDemoData?: boolean } | null
+}
+
+/**
+ * Reads isDemoData off whichever relation the case is actually attached to,
+ * using the same payment > subscription > invoice > mandate > order
+ * precedence as recoveryCaseCategory() — the two must agree, since this is
+ * "is the record backing this case's category a controlled/demo record."
+ */
+export function isControlledRecoveryCase(
+  recoveryCase: RecoveryCaseDemoLinks,
+): boolean {
+  const record =
+    recoveryCase.payment ??
+    recoveryCase.subscription ??
+    recoveryCase.invoice ??
+    recoveryCase.mandate ??
+    recoveryCase.order
+
+  return Boolean(record?.isDemoData)
+}

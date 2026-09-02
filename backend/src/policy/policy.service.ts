@@ -11,6 +11,15 @@ export interface PolicyCheckResult {
   decision: PolicyAction;
   policyId: string;
   reason: string;
+  /**
+   * How many times this action has actually been attempted for the case,
+   * and the configured cap (whichever of maxRetries/maxContacts the matched
+   * policy uses) — present only when a real Policy row was matched, so the
+   * UI can show "2 of 3" rather than re-deriving it. Never affects the
+   * decision above; purely informational.
+   */
+  attemptsUsed?: number;
+  attemptsLimit?: number | null;
 }
 
 @Injectable()
@@ -134,11 +143,20 @@ export class PolicyService {
       };
     }
 
+    // Whichever cap this policy actually uses — a given action type is
+    // configured with at most one of these (see default-policies.ts) — and
+    // the shared attempt count (retryCount === contactCount at the one real
+    // call site, checkForRecoveryCase). Purely informational for the UI.
+    const attemptsUsed = retryCount;
+    const attemptsLimit = policy.maxRetries ?? policy.maxContacts ?? null;
+
     if (policy.maxAmount !== null && amount > Number(policy.maxAmount)) {
       return {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
         reason: 'Payment amount exceeds the configured policy limit.',
+        attemptsUsed,
+        attemptsLimit,
       };
     }
 
@@ -147,6 +165,8 @@ export class PolicyService {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
         reason: `Retry count exceeds the configured policy limit of ${policy.maxRetries}.`,
+        attemptsUsed,
+        attemptsLimit,
       };
     }
 
@@ -155,6 +175,8 @@ export class PolicyService {
         decision: PolicyAction.BLOCK,
         policyId: policy.id,
         reason: 'Customer contact limit for this channel has been reached.',
+        attemptsUsed,
+        attemptsLimit,
       };
     }
 
@@ -183,6 +205,8 @@ export class PolicyService {
           reason:
             `Configured retry policy requires a ${policy.retryIntervalMinutes}-minute gap between attempts; ` +
             `${minutesRemaining} minute(s) remain. A human can still approve an early retry.`,
+          attemptsUsed,
+          attemptsLimit,
         };
       }
     }
@@ -191,6 +215,8 @@ export class PolicyService {
       decision: policy.decision,
       policyId: policy.id,
       reason: policy.description ?? 'Policy decision applied.',
+      attemptsUsed,
+      attemptsLimit,
     };
   }
 
@@ -334,6 +360,8 @@ export class PolicyService {
         decision: result.decision,
         policyId: result.policyId,
         reason: result.reason,
+        attemptsUsed: result.attemptsUsed ?? null,
+        attemptsLimit: result.attemptsLimit ?? null,
       },
     });
 

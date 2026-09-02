@@ -39,4 +39,13 @@ export class AnalyticsController {
   getRecoveryFunnel(@Req() request: Request & { user: AuthenticatedUser }) {
     return this.analyticsService.getRecoveryFunnel(request.user.merchantId);
   }
+
+  @Get('risk-signal-breakdown')
+  getRiskSignalBreakdown(
+    @Req() request: Request & { user: AuthenticatedUser },
+  ) {
+    return this.analyticsService.getRiskSignalBreakdown(
+      request.user.merchantId,
+    );
+  }
 }

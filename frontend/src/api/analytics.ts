@@ -100,3 +100,19 @@ export interface RecoveryFunnelResponse {
 export function getRecoveryFunnel(token: string) {
   return fetchJson<RecoveryFunnelResponse>('/analytics/recovery-funnel', token)
 }
+
+export interface RiskSignalBreakdownResponse {
+  paymentFailure: number
+  subscriptionFailure: number
+  receivableOverdue: number
+  mandateFailure: number
+  checkoutAbandonment: number
+  promiseToPayPending: number
+}
+
+export function getRiskSignalBreakdown(token: string) {
+  return fetchJson<RiskSignalBreakdownResponse>(
+    '/analytics/risk-signal-breakdown',
+    token,
+  )
+}

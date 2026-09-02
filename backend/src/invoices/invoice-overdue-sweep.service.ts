@@ -60,11 +60,16 @@ export class InvoiceOverdueSweepService implements OnModuleInit {
 
   /**
    * Flips any ISSUED invoice past its dueDate to OVERDUE, then opens a real
-   * RecoveryCase for each via RiskService.assessInvoiceOverdue — detection
-   * only, same convention as every other automatic path; the merchant (or
-   * a batch run) still decides when to act on it.
+   * RecoveryCase for each via RiskService.assessInvoiceOverdue, immediately
+   * followed by the same fire-and-forget automatic recovery run as every
+   * other real-time path — unless options.autoRun is explicitly false.
+   *
+   * Recovery Lab passes autoRun: false so the case stays OPEN for a judge to
+   * trigger "Run full agent" themselves instead of it resolving before they
+   * can watch it; the real scheduled sweep and any future "run sweep now"
+   * endpoint keep the default (true).
    */
-  async sweepOnce(merchantId?: string) {
+  async sweepOnce(merchantId?: string, options?: { autoRun?: boolean }) {
     const staleInvoices = await this.prisma.invoice.findMany({
       where: {
         ...(merchantId ? { merchantId } : {}),
@@ -91,13 +96,14 @@ export class InvoiceOverdueSweepService implements OnModuleInit {
       caseIds.push(recoveryCase.id);
     }
 
-    // Fire-and-forget from sweepOnce's perspective (unchanged timing
-    // contract for callers like RecoveryLabService), but internally bounded
-    // so a 200-case sweep can't burst 200 concurrent /diagnose calls at
-    // Gemini — see concurrency.util.ts.
-    void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
-      this.autoOrchestrator.runAutomaticRecovery(caseId),
-    );
+    if (options?.autoRun ?? true) {
+      // Fire-and-forget from sweepOnce's perspective, but internally bounded
+      // so a 200-case sweep can't burst 200 concurrent /diagnose calls at
+      // Gemini — see concurrency.util.ts.
+      void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
+        this.autoOrchestrator.runAutomaticRecovery(caseId),
+      );
+    }
 
     if (staleInvoices.length > 0) {
       this.logger.log(

@@ -226,7 +226,11 @@ export function AgentExecutionTimeline({
     {
       key: 'final',
       typeLabel:
-        finalOutcome?.kind === 'escalated' ? 'Human review' : 'Outcome',
+        finalOutcome?.kind === 'escalated'
+          ? 'Human review'
+          : finalOutcome?.kind === 'recovered'
+            ? 'Recovered'
+            : 'Outcome',
       Icon:
         finalOutcome?.kind === 'escalated' ? UserRound : CheckCircle2,
       tone: finalOutcome
@@ -234,7 +238,10 @@ export function AgentExecutionTimeline({
           ? 'done'
           : 'warn'
         : 'idle',
-      value: finalOutcome?.label,
+      // Prefer the recovered ₹ figure as the headline value (matching how
+      // the Payment/Risk cards lead with an amount) — fall back to the
+      // outcome label for an escalated case, which has no amount to show.
+      value: finalOutcome?.amount ?? finalOutcome?.label,
       caption: finalOutcome?.detail,
     },
   ]

@@ -24,10 +24,11 @@ const AUTO_RECOVERY_CONCURRENCY = 3;
  * webhook; this covers the case where the customer never attempted one at
  * all.
  *
- * Detection only, same as every other automatic path (payment.failed
- * webhook, overdue-invoice checks) — this opens a RecoveryCase but does not
- * itself enqueue the agent. The merchant (or a batch run) decides when to
- * act on it.
+ * Detection immediately followed by the same fire-and-forget automatic
+ * recovery run as every other real-time path (payment.failed webhook,
+ * overdue-invoice sweep) — see the autoRun option on sweepOnce() for the
+ * one caller (Recovery Lab) that deliberately opts out of this so a judge
+ * can watch "Run full agent" process the case themselves.
  */
 @Injectable()
 export class CheckoutSweepService implements OnModuleInit {
@@ -77,8 +78,15 @@ export class CheckoutSweepService implements OnModuleInit {
    * endpoint. Pass merchantId to scope a manual/on-demand run (e.g. a
    * "Run sweep now" button); omit it for the global scheduled sweep across
    * every merchant.
+   *
+   * options.autoRun (default true) controls whether newly-opened cases are
+   * immediately handed to RecoveryAutoOrchestratorService, matching the real
+   * scheduled sweep and the merchant "run sweep now" endpoint. Recovery Lab
+   * passes autoRun: false so the case stays OPEN for a judge to trigger
+   * "Run full agent" themselves instead of it resolving before they can
+   * watch it.
    */
-  async sweepOnce(merchantId?: string) {
+  async sweepOnce(merchantId?: string, options?: { autoRun?: boolean }) {
     const staleOrders = await this.prisma.order.findMany({
       where: {
         ...(merchantId ? { merchantId } : {}),
@@ -108,13 +116,14 @@ export class CheckoutSweepService implements OnModuleInit {
       caseIds.push(recoveryCase.id);
     }
 
-    // Fire-and-forget from sweepOnce's perspective (unchanged timing
-    // contract for callers like RecoveryLabService), but internally bounded
-    // so a large sweep can't burst dozens of concurrent /diagnose calls at
-    // Gemini — see concurrency.util.ts.
-    void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
-      this.autoOrchestrator.runAutomaticRecovery(caseId),
-    );
+    if (options?.autoRun ?? true) {
+      // Fire-and-forget from sweepOnce's perspective, but internally bounded
+      // so a large sweep can't burst dozens of concurrent /diagnose calls at
+      // Gemini — see concurrency.util.ts.
+      void runWithConcurrency(caseIds, AUTO_RECOVERY_CONCURRENCY, (caseId) =>
+        this.autoOrchestrator.runAutomaticRecovery(caseId),
+      );
+    }
 
     if (staleOrders.length > 0) {
       this.logger.log(

@@ -16,6 +16,7 @@ import {
   type RecoveryCase,
 } from "../api/recoveryCases";
 import { getCaseAuditTrail, type AuditLogEntry } from "../api/audit";
+import { findRecoveryProof } from "../lib/auditTrail";
 import { VidurRecoveryPanel } from "../components/recovery/VidurRecoveryPanel";
 import { PromiseToPayPanel } from "../components/recovery/PromiseToPayPanel";
 import { AgentAuditTrail } from "../components/recovery/AgentAuditTrail";
@@ -30,6 +31,7 @@ import {
   caseStatusTone,
   formatAmount,
   formatLabel,
+  isControlledRecoveryCase,
   policyTone,
   recoveryCaseCategory,
   recoveryCaseCategoryMeta,
@@ -171,6 +173,15 @@ export function RecoveryCaseDetails() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge
+            label={
+              isControlledRecoveryCase(recoveryCase)
+                ? "Controlled demo scenario"
+                : "Real Razorpay event"
+            }
+            tone={isControlledRecoveryCase(recoveryCase) ? "amber" : "emerald"}
+          />
+
           <StatusBadge
             label={recoveryCase.status}
             tone={caseStatusTone(recoveryCase.status)}
@@ -573,32 +584,77 @@ export function RecoveryCaseDetails() {
       {recoveryCase.outcome && (
         <article
           className={cn(
-            "mt-4 flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6",
+            "mt-4 rounded-2xl border p-5 sm:p-6",
             recoveryCase.outcome.successful
               ? "border-emerald-500/20 bg-emerald-500/[0.05]"
               : "border-border bg-card",
           )}>
-          <div>
-            <p
-              className={cn(
-                "text-[10px] font-semibold uppercase tracking-[0.14em]",
-                recoveryCase.outcome.successful
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground",
-              )}>
-              Recovery outcome
-            </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p
+                className={cn(
+                  "text-[10px] font-semibold uppercase tracking-[0.14em]",
+                  recoveryCase.outcome.successful
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+                )}>
+                {recoveryCase.outcome.successful
+                  ? "Recovery proof"
+                  : "Recovery outcome"}
+              </p>
 
-            <h2 className="mt-1 text-base font-semibold text-foreground">
-              {recoveryCase.outcome.successful
-                ? "Revenue recovered"
-                : "Recovery unsuccessful"}
-            </h2>
+              <h2 className="mt-1 text-base font-semibold text-foreground">
+                {recoveryCase.outcome.successful
+                  ? "Revenue recovered"
+                  : "Recovery unsuccessful"}
+              </h2>
+            </div>
+
+            <strong className="text-2xl font-semibold tracking-tight text-foreground">
+              {formatAmount(recoveryCase.outcome.recoveredAmount)}
+            </strong>
           </div>
 
-          <strong className="text-2xl font-semibold tracking-tight text-foreground">
-            {formatAmount(recoveryCase.outcome.recoveredAmount)}
-          </strong>
+          {recoveryCase.outcome.successful && (
+            <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-emerald-500/15 pt-4 text-sm sm:grid-cols-2">
+              {recoveryCase.outcome.recoveryMethod && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Recovery action</dt>
+                  <dd className="font-medium text-foreground">
+                    {formatLabel(recoveryCase.outcome.recoveryMethod)}
+                  </dd>
+                </div>
+              )}
+
+              {(() => {
+                const proof = findRecoveryProof(auditTrail);
+                return (
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Verification</dt>
+                    <dd className="text-right font-medium text-foreground">
+                      {proof ? proof.sourceLabel : "Pending audit trail"}
+                    </dd>
+                  </div>
+                );
+              })()}
+
+              {recoveryCase.outcome.recoveredAt && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Verified at</dt>
+                  <dd className="font-medium text-foreground">
+                    {new Date(recoveryCase.outcome.recoveredAt).toLocaleString()}
+                  </dd>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">Audit trail</dt>
+                <dd className="font-medium text-foreground">
+                  {auditTrail.length} event{auditTrail.length === 1 ? "" : "s"}
+                </dd>
+              </div>
+            </dl>
+          )}
         </article>
       )}
 

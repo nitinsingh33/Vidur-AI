@@ -18,11 +18,15 @@ const LAB_EXTERNAL_ID_PREFIX = 'VIDUR-LAB-';
  * Subscription, Invoice, or Mandate) via the exact same services production
  * traffic uses, then opens a real case via the exact same risk-assessment /
  * sweep services a genuine webhook or scheduled sweep would use. Unlike a
- * real webhook, none of these auto-run RecoveryAutoOrchestratorService —
- * this is the surface a merchant (or a judge) is actively watching, so the
- * case is left OPEN for them to run "Run full agent" on themselves and see
- * the unmodified pipeline execute live, rather than it finishing invisibly
- * in the background before anyone opens the case. Nothing here ever creates
+ * real webhook or scheduled sweep, none of these six scenarios auto-run
+ * RecoveryAutoOrchestratorService — this is the surface a merchant (or a
+ * judge) is actively watching, so the case is left OPEN for them to run
+ * "Run full agent" on themselves and see the unmodified pipeline execute
+ * live, rather than it finishing invisibly before anyone opens the case.
+ * (The two scenarios that reuse a real sweep service — checkout-abandonment
+ * and invoice-overdue/promise-to-pay — pass that sweep's autoRun: false
+ * option for exactly this reason; the real scheduled sweeps keep autoRun's
+ * default of true.) Nothing here ever creates
  * a RecoveryOutcome or marks a case RECOVERED directly — that still only
  * happens through the real, provider-confirmed path (a Razorpay webhook, or
  * a merchant's own "Mark Paid" for B2B).
@@ -115,7 +119,8 @@ export class RecoveryLabService {
    * with a real abandon-signal timestamp (the same field a browser tab-close
    * from the storefront sets), then processed by the real, unmodified
    * checkout-abandonment sweep immediately instead of waiting out its
-   * schedule.
+   * schedule. autoRun: false so the resulting case is left OPEN for the
+   * judge to run "Run full agent" themselves, same as every other scenario.
    */
   async launchCheckoutAbandonment(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
@@ -135,14 +140,16 @@ export class RecoveryLabService {
       },
     });
 
-    const sweepResult = await this.checkoutSweepService.sweepOnce(merchantId);
+    const sweepResult = await this.checkoutSweepService.sweepOnce(merchantId, {
+      autoRun: false,
+    });
 
     return {
       scenario: 'CHECKOUT_DROP_OFF',
       orderId: order.id,
       recoveryCaseId: sweepResult.caseIds[0] ?? null,
       instructions:
-        'A real abandoned-checkout Order was created with a real close-signal timestamp, and the checkout-abandonment sweep was run immediately (it otherwise runs on its own schedule). If a case id is present, Vidur has already processed it automatically.',
+        'A real abandoned-checkout Order was created with a real close-signal timestamp, and the checkout-abandonment sweep was run immediately (it otherwise runs on its own schedule) to open the case. Open the case and click "Run full agent" to watch Vidur handle it live.',
     };
   }
 
@@ -188,7 +195,8 @@ export class RecoveryLabService {
   /**
    * Scenario 4: B2B receivables chaser — a real overdue Invoice, processed
    * by the real, unmodified invoice-overdue sweep immediately instead of
-   * waiting out its schedule.
+   * waiting out its schedule. autoRun: false so the resulting case is left
+   * OPEN for the judge to run "Run full agent" themselves.
    */
   async launchInvoiceOverdue(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
@@ -208,14 +216,17 @@ export class RecoveryLabService {
       { isDemoData },
     );
 
-    const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(merchantId);
+    const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(
+      merchantId,
+      { autoRun: false },
+    );
 
     return {
       scenario: 'B2B_RECEIVABLES_CHASER',
       invoiceId: invoice.id,
       recoveryCaseId: sweepResult.caseIds[0] ?? null,
       instructions:
-        'A real invoice was created with a due date 10 days in the past, and the overdue-invoice sweep was run immediately (it otherwise runs on its own schedule). If a case id is present, Vidur has already processed it automatically.',
+        'A real invoice was created with a due date 10 days in the past, and the overdue-invoice sweep was run immediately (it otherwise runs on its own schedule) to open the case. Open the case and click "Run full agent" to watch Vidur handle it live.',
     };
   }
 
@@ -274,7 +285,11 @@ export class RecoveryLabService {
    * doesn't have to wait days for the real verification sweep to matter —
    * the sweep itself, and what happens on a miss (the real Detection ->
    * Strategy -> Policy -> Action -> Observe pipeline), are both completely
-   * unmodified production code.
+   * unmodified production code. The initial invoice-overdue sweep runs with
+   * autoRun: false — the case sits OPEN (no payment link sent yet) while the
+   * promise is recorded, which is also the truer sequence: a merchant who
+   * already has a promise on file wouldn't want the automatic pipeline
+   * hitting the customer with a payment link in the same breath.
    */
   async launchPromiseToPay(
     merchantId: string,
@@ -300,7 +315,10 @@ export class RecoveryLabService {
       { isDemoData },
     );
 
-    const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(merchantId);
+    const sweepResult = await this.invoiceOverdueSweepService.sweepOnce(
+      merchantId,
+      { autoRun: false },
+    );
     const recoveryCaseId = sweepResult.caseIds[0] ?? null;
 
     if (!recoveryCaseId) {
