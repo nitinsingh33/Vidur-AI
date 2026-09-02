@@ -16,6 +16,7 @@ describe('StorefrontService', () => {
 
   const razorpayService = {
     createCheckoutOrder: jest.fn(),
+    createSubscription: jest.fn(),
   } as unknown as RazorpayService;
 
   beforeEach(() => {
@@ -115,6 +116,85 @@ describe('StorefrontService', () => {
     expect(result).toEqual({
       status: 'CREATED',
       recovery: { actionType: 'RETRY_PAYMENT', paymentLinkUrl: 'https://rzp.io/rzp/abc' },
+    });
+  });
+
+  describe('createSubscription — FashionKart Plus', () => {
+    const merchant = {
+      id: 'merchant-1',
+      name: 'FashionKart',
+      currency: 'INR',
+      slug: 'fashionkart',
+    };
+
+    beforeEach(() => {
+      (prisma.merchant.findUnique as jest.Mock).mockResolvedValue(merchant);
+      (prisma.customer.upsert as jest.Mock).mockResolvedValue({ id: 'customer-1' });
+      (razorpayService.createSubscription as jest.Mock).mockResolvedValue({
+        id: 'sub-internal-1',
+        externalId: 'sub_test123',
+        shortUrl: 'https://rzp.io/rzp/subscription-auth',
+        status: 'created',
+        amount: 499,
+        currency: 'INR',
+      });
+    });
+
+    it('ignores any client-supplied amount and always prices FashionKart Plus at the fixed ₹499/month', async () => {
+      await service.createSubscription('fashionkart', {
+        // @ts-expect-error — deliberately probing that a client-supplied
+        // amount is never read, even if a caller tried to send one.
+        amount: 1,
+        customer: { name: 'Jane Doe', email: 'jane@example.com' },
+      });
+
+      expect(razorpayService.createSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-1',
+          amount: 499,
+          period: 'monthly',
+        }),
+      );
+    });
+
+    it('upserts the guest customer by email before creating the subscription', async () => {
+      await service.createSubscription('fashionkart', {
+        customer: { name: 'Jane Doe', email: 'jane@example.com', phone: '9999999999' },
+      });
+
+      expect(prisma.customer.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            merchantId_externalId: {
+              merchantId: 'merchant-1',
+              externalId: 'jane@example.com',
+            },
+          },
+        }),
+      );
+      expect(razorpayService.createSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({ customerId: 'customer-1' }),
+      );
+    });
+
+    it('returns only shortUrl — never a raw Razorpay credential or internal id', async () => {
+      const result = await service.createSubscription('fashionkart', {
+        customer: { name: 'Jane Doe', email: 'jane@example.com' },
+      });
+
+      expect(result).toEqual({ shortUrl: 'https://rzp.io/rzp/subscription-auth' });
+    });
+
+    it('rejects an unknown store slug before touching Razorpay', async () => {
+      (prisma.merchant.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.createSubscription('nonexistent', {
+          customer: { name: 'Jane Doe', email: 'jane@example.com' },
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(razorpayService.createSubscription).not.toHaveBeenCalled();
     });
   });
 

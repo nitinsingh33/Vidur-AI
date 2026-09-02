@@ -1,5 +1,5 @@
 import { Link, Outlet, useParams } from 'react-router-dom'
-import { ShoppingBag } from 'lucide-react'
+import { ShoppingBag, Sparkles } from 'lucide-react'
 import { CartProvider } from '../../context/CartContext'
 import { useCart } from '../../context/useCart'
 
@@ -16,18 +16,28 @@ function StoreHeader({ slug }: { slug: string }) {
           FashionKart
         </Link>
 
-        <Link
-          to={`/store/${slug}/cart`}
-          className="relative inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/60"
-        >
-          <ShoppingBag size={16} />
-          Cart
-          {totalItems > 0 && (
-            <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-              {totalItems}
-            </span>
-          )}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/store/${slug}/plus`}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/60"
+          >
+            <Sparkles size={16} />
+            FashionKart Plus
+          </Link>
+
+          <Link
+            to={`/store/${slug}/cart`}
+            className="relative inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/60"
+          >
+            <ShoppingBag size={16} />
+            Cart
+            {totalItems > 0 && (
+              <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                {totalItems}
+              </span>
+            )}
+          </Link>
+        </div>
       </div>
     </header>
   )

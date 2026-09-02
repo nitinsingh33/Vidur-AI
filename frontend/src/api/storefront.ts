@@ -103,6 +103,27 @@ export function sendAbandonSignal(internalOrderId: string) {
   void fetch(url, { method: 'POST', keepalive: true })
 }
 
+export interface StorefrontSubscription {
+  shortUrl: string
+}
+
+/**
+ * FashionKart Plus — no amount/plan in the payload: it's a single fixed
+ * membership tier priced server-side, never taken from the client. Returns
+ * a real Razorpay-hosted shortUrl the customer completes on Razorpay's own
+ * page, the same "hosted redirect" flow as a Payment Link — not a
+ * Checkout.js modal.
+ */
+export function createStorefrontSubscription(
+  slug: string,
+  payload: { customer: { name: string; email: string; phone?: string } },
+): Promise<StorefrontSubscription> {
+  return requestJson(`/storefront/${encodeURIComponent(slug)}/subscribe`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function getStorefrontOrderStatus(
   internalOrderId: string,
 ): Promise<StorefrontOrderStatus> {

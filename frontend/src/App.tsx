@@ -38,6 +38,7 @@ import { StoreHome } from './pages/store/StoreHome'
 import { ProductDetail } from './pages/store/ProductDetail'
 import { CartPage } from './pages/store/CartPage'
 import { CheckoutPage } from './pages/store/CheckoutPage'
+import { FashionKartPlus } from './pages/store/FashionKartPlus'
 
 import './index.css'
 
@@ -239,6 +240,10 @@ function App() {
             <Route
               path="checkout"
               element={<CheckoutPage />}
+            />
+            <Route
+              path="plus"
+              element={<FashionKartPlus />}
             />
           </Route>
 

@@ -6,6 +6,16 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { RazorpayService } from '../razorpay/razorpay.service';
 import { CreateStorefrontOrderDto } from './dto/create-storefront-order.dto';
+import { CreateStorefrontSubscriptionDto } from './dto/create-storefront-subscription.dto';
+
+/**
+ * FashionKart Plus is a single fixed membership tier, not a Product-catalog
+ * item — there's no "plan" concept in the schema to look up, so the price is
+ * a server-side constant instead. Never taken from the client, same rule
+ * createOrder already follows for cart totals.
+ */
+const FASHIONKART_PLUS_AMOUNT_INR = 499;
+const FASHIONKART_PLUS_PERIOD = 'monthly' as const;
 
 /**
  * The public (unauthenticated) storefront a shopper actually sees —
@@ -121,6 +131,54 @@ export class StorefrontService {
     });
 
     return checkoutOrder;
+  }
+
+  /**
+   * FashionKart Plus — a real recurring Razorpay Subscription, priced at the
+   * fixed FASHIONKART_PLUS_AMOUNT_INR constant above (never the client's
+   * word for it). Reuses the exact same guest-customer-upsert pattern as
+   * createOrder, then delegates to the already-real
+   * RazorpayService.createSubscription — the same method the merchant
+   * dashboard's "New subscription" flow uses, just reached from a public,
+   * slug-scoped route instead of a merchant JWT. Returns only shortUrl: the
+   * customer completes the actual mandate authorization on Razorpay's own
+   * hosted page, exactly like a Payment Link.
+   */
+  async createSubscription(slug: string, dto: CreateStorefrontSubscriptionDto) {
+    const merchant = await this.findMerchantBySlug(slug);
+
+    const customer = await this.prisma.customer.upsert({
+      where: {
+        merchantId_externalId: {
+          merchantId: merchant.id,
+          externalId: dto.customer.email,
+        },
+      },
+      update: {
+        name: dto.customer.name,
+        phone: dto.customer.phone,
+      },
+      create: {
+        merchantId: merchant.id,
+        externalId: dto.customer.email,
+        name: dto.customer.name,
+        email: dto.customer.email,
+        phone: dto.customer.phone,
+      },
+    });
+
+    const subscription = await this.razorpayService.createSubscription({
+      merchantId: merchant.id,
+      customerId: customer.id,
+      amount: FASHIONKART_PLUS_AMOUNT_INR,
+      currency: merchant.currency,
+      period: FASHIONKART_PLUS_PERIOD,
+      customerName: dto.customer.name,
+      customerEmail: dto.customer.email,
+      customerPhone: dto.customer.phone,
+    });
+
+    return { shortUrl: subscription.shortUrl };
   }
 
   /**

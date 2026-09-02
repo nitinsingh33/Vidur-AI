@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { StorefrontService } from './storefront.service';
 import { CreateStorefrontOrderDto } from './dto/create-storefront-order.dto';
+import { CreateStorefrontSubscriptionDto } from './dto/create-storefront-subscription.dto';
 
 /**
  * Fully public — no JwtAuthGuard. This is the customer-facing storefront
@@ -31,6 +32,14 @@ export class StorefrontController {
     @Body() dto: CreateStorefrontOrderDto,
   ) {
     return this.storefrontService.createOrder(slug, dto);
+  }
+
+  @Post(':slug/subscribe')
+  createSubscription(
+    @Param('slug') slug: string,
+    @Body() dto: CreateStorefrontSubscriptionDto,
+  ) {
+    return this.storefrontService.createSubscription(slug, dto);
   }
 
   @Post('orders/:orderId/abandon-signal')
