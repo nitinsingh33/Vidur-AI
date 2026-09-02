@@ -275,6 +275,32 @@ export class RazorpayService {
    * payment_link.paid webhook find its way back here as a fallback, but
    * the primary lookup is RecoveryAction.externalReferenceId = link id.
    */
+  /**
+   * Razorpay's payment_links endpoint returns HTTP 400 (not 429) for rate
+   * limiting, distinguishable only by the error description — a burst of
+   * concurrent recovery attempts (e.g. an overdue-invoice sweep opening many
+   * cases at once) genuinely trips this. Retried with backoff, exactly like
+   * the agent service's Gemini 429 handling; every other error (a bad
+   * amount, missing fields, auth) is permanent and fails immediately —
+   * retrying those would just waste the case's bounded attempt budget on an
+   * outcome that can never change.
+   */
+  private static readonly PAYMENT_LINK_MAX_RETRIES = 2;
+  private static readonly PAYMENT_LINK_BASE_BACKOFF_MS = 500;
+
+  private isRazorpayRateLimited(errorBody: string): boolean {
+    try {
+      const parsed = JSON.parse(errorBody) as {
+        error?: { description?: string };
+      };
+      return (parsed.error?.description ?? '')
+        .toLowerCase()
+        .includes('too many requests');
+    } catch {
+      return false;
+    }
+  }
+
   async createPaymentLink(params: {
     amount: number;
     currency?: string;
@@ -285,42 +311,67 @@ export class RazorpayService {
     recoveryCaseId: string;
     merchantId: string;
   }): Promise<RazorpayPaymentLink> {
-    const response = await fetch('https://api.razorpay.com/v1/payment_links/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${await this.basicAuthHeader(params.merchantId)}`,
-        'Content-Type': 'application/json',
+    const authHeader = await this.basicAuthHeader(params.merchantId);
+    const body = JSON.stringify({
+      amount: Math.round(params.amount * 100),
+      currency: params.currency ?? 'INR',
+      description: params.description,
+      customer: {
+        name: params.customerName,
+        email: params.customerEmail,
+        contact: params.customerPhone,
       },
-      body: JSON.stringify({
-        amount: Math.round(params.amount * 100),
-        currency: params.currency ?? 'INR',
-        description: params.description,
-        customer: {
-          name: params.customerName,
-          email: params.customerEmail,
-          contact: params.customerPhone,
-        },
-        notify: {
-          sms: Boolean(params.customerPhone),
-          email: Boolean(params.customerEmail),
-        },
-        reminder_enable: true,
-        notes: {
-          recoveryCaseId: params.recoveryCaseId,
-          merchantId: params.merchantId,
-        },
-      }),
+      notify: {
+        sms: Boolean(params.customerPhone),
+        email: Boolean(params.customerEmail),
+      },
+      reminder_enable: true,
+      notes: {
+        recoveryCaseId: params.recoveryCaseId,
+        merchantId: params.merchantId,
+      },
     });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-
-      throw new InternalServerErrorException(
-        `Razorpay payment link creation failed: ${errorBody}`,
+    for (
+      let attempt = 0;
+      attempt <= RazorpayService.PAYMENT_LINK_MAX_RETRIES;
+      attempt += 1
+    ) {
+      const response = await fetch(
+        'https://api.razorpay.com/v1/payment_links/',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${authHeader}`,
+            'Content-Type': 'application/json',
+          },
+          body,
+        },
       );
+
+      if (response.ok) {
+        return (await response.json()) as RazorpayPaymentLink;
+      }
+
+      const errorBody = await response.text();
+      const rateLimited = this.isRazorpayRateLimited(errorBody);
+
+      if (!rateLimited || attempt === RazorpayService.PAYMENT_LINK_MAX_RETRIES) {
+        throw new InternalServerErrorException(
+          `Razorpay payment link creation failed: ${errorBody}`,
+        );
+      }
+
+      const backoffMs =
+        RazorpayService.PAYMENT_LINK_BASE_BACKOFF_MS * 2 ** attempt +
+        Math.random() * 250;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
 
-    return (await response.json()) as RazorpayPaymentLink;
+    // Unreachable — the loop above always either returns or throws.
+    throw new InternalServerErrorException(
+      'Razorpay payment link creation failed after retries.',
+    );
   }
 
   /**

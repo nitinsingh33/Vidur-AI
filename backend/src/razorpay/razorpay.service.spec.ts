@@ -112,6 +112,75 @@ describe('RazorpayService — per-merchant credential resolution', () => {
     });
   });
 
+  describe('createPaymentLink — Razorpay rate-limit retry', () => {
+    const params = {
+      amount: 1000,
+      description: 'test payment link',
+      recoveryCaseId: 'case-1',
+      merchantId: 'merchant-1',
+    };
+
+    const rateLimitedResponse = {
+      ok: false,
+      text: async () =>
+        JSON.stringify({
+          error: { description: 'Too many requests', code: 'BAD_REQUEST_ERROR' },
+        }),
+    };
+
+    const successResponse = {
+      ok: true,
+      json: async () => ({
+        id: 'plink_1',
+        short_url: 'https://rzp.io/l/abc',
+        status: 'created',
+        amount: 100000,
+        currency: 'INR',
+      }),
+    };
+
+    it('fails immediately on a permanent (non-rate-limit) error, without retrying', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        text: async () =>
+          JSON.stringify({
+            error: {
+              description: 'amount exceeds maximum amount allowed.',
+              code: 'BAD_REQUEST_ERROR',
+            },
+          }),
+      });
+
+      await expect(service.createPaymentLink(params)).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a rate-limited response and succeeds once Razorpay accepts it', async () => {
+      fetchMock
+        .mockResolvedValueOnce(rateLimitedResponse)
+        .mockResolvedValueOnce(successResponse);
+
+      const result = await service.createPaymentLink(params);
+
+      expect(result.id).toBe('plink_1');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    }, 10000);
+
+    it('gives up after exhausting retries if every attempt is rate-limited', async () => {
+      fetchMock.mockResolvedValue(rateLimitedResponse);
+
+      await expect(service.createPaymentLink(params)).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+
+      // Bounded: initial attempt + PAYMENT_LINK_MAX_RETRIES retries, never more.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    }, 10000);
+  });
+
   describe('webhook signature isolation between merchants', () => {
     function sign(secret: string, body: Buffer): string {
       return createHmac('sha256', secret).update(body).digest('hex');
