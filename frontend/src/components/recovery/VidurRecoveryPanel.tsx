@@ -465,7 +465,15 @@ export function VidurRecoveryPanel({
           </div>
         )}
 
-        {state === 'idle' && (
+        {/*
+          Only offer manual controls when the case genuinely has no pipeline
+          data yet (e.g. a Recovery Lab scenario deliberately left OPEN for a
+          judge to trigger themselves). A real case is already auto-processed
+          by RecoveryAutoOrchestratorService the instant its webhook/sweep
+          fires — showing this CTA on top of an already-completed pipeline
+          falsely implies the merchant has to click something.
+        */}
+        {state === 'idle' && !hasPipelineData && (
           <div className="grid gap-4 lg:grid-cols-[1fr_1.15fr]">
             <div className="rounded-2xl border border-border bg-secondary/20 p-5">
               <div className="flex size-9 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm">
