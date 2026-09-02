@@ -6,7 +6,6 @@ import { RiskService } from '../risk/risk.service';
 import { CheckoutSweepService } from '../checkout-sweep/checkout-sweep.service';
 import { InvoiceOverdueSweepService } from '../invoices/invoice-overdue-sweep.service';
 import { InvoicesService } from '../invoices/invoices.service';
-import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import { PromiseToPayService } from '../promise-to-pay/promise-to-pay.service';
 import { PaymentMethod, PaymentStatus } from '../generated/prisma/enums';
 import { LaunchScenarioDto } from './dto/launch-scenario.dto';
@@ -17,10 +16,14 @@ const LAB_EXTERNAL_ID_PREFIX = 'VIDUR-LAB-';
  * "Recovery Lab" — a scenario launcher, not a fake-data generator. Every
  * method here creates real underlying rows (a real Payment, Order,
  * Subscription, Invoice, or Mandate) via the exact same services production
- * traffic uses, then hands off to the exact same automatic pipeline
- * (RecoveryAutoOrchestratorService / the real sweep services) that a genuine
- * webhook or scheduled sweep would use. Nothing here ever creates a
- * RecoveryOutcome or marks a case RECOVERED directly — that still only
+ * traffic uses, then opens a real case via the exact same risk-assessment /
+ * sweep services a genuine webhook or scheduled sweep would use. Unlike a
+ * real webhook, none of these auto-run RecoveryAutoOrchestratorService —
+ * this is the surface a merchant (or a judge) is actively watching, so the
+ * case is left OPEN for them to run "Run full agent" on themselves and see
+ * the unmodified pipeline execute live, rather than it finishing invisibly
+ * in the background before anyone opens the case. Nothing here ever creates
+ * a RecoveryOutcome or marks a case RECOVERED directly — that still only
  * happens through the real, provider-confirmed path (a Razorpay webhook, or
  * a merchant's own "Mark Paid" for B2B).
  */
@@ -33,7 +36,6 @@ export class RecoveryLabService {
     private readonly checkoutSweepService: CheckoutSweepService,
     private readonly invoiceOverdueSweepService: InvoiceOverdueSweepService,
     private readonly invoicesService: InvoicesService,
-    private readonly autoOrchestrator: RecoveryAutoOrchestratorService,
     private readonly promiseToPayService: PromiseToPayService,
   ) {}
 
@@ -71,8 +73,13 @@ export class RecoveryLabService {
 
   /**
    * Scenario 1: Payment degradation — a genuine FAILED Payment, assessed and
-   * handed straight to the automatic orchestrator, exactly like a real
-   * payment.failed webhook would be.
+   * left OPEN. Deliberately does NOT auto-run the orchestrator the way a
+   * real payment.failed webhook does: this is the demo surface a judge is
+   * watching live, and firing it in the background here means the whole
+   * diagnose/decide/execute pipeline has already finished by the time
+   * anyone opens the case — nothing left to actually watch happen. Pressing
+   * "Run full agent" on the case page runs the exact same unmodified
+   * pipeline, just with the judge present to see it.
    */
   async launchPaymentFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
@@ -94,13 +101,12 @@ export class RecoveryLabService {
     );
 
     const recoveryCase = await this.riskService.assessPayment(payment.id);
-    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
 
     return {
       scenario: 'PAYMENT_DEGRADATION',
       recoveryCaseId: recoveryCase.id,
       instructions:
-        'A real failed payment was recorded and handed to Vidur\'s automatic pipeline. Watch this case update in real time — no further clicks needed.',
+        'A real failed payment was recorded and a recovery case opened. Open the case and click "Run full agent" to watch Vidur diagnose it, decide, and act live.',
     };
   }
 
@@ -143,8 +149,9 @@ export class RecoveryLabService {
   /**
    * Scenario 3: Failed subscription — a real Subscription whose billing
    * cycle genuinely failed (mirrors exactly what RazorpayWebhookService does
-   * on a real subscription.pending webhook), then handed to the automatic
-   * orchestrator.
+   * on a real subscription.pending webhook), left OPEN for the same reason
+   * as launchPaymentFailure above: the judge should watch the agent run,
+   * not arrive to an already-finished case.
    */
   async launchSubscriptionFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
@@ -168,14 +175,13 @@ export class RecoveryLabService {
     });
 
     const recoveryCase = await this.riskService.assessSubscriptionFailure(updated.id);
-    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
 
     return {
       scenario: 'FAILED_SUBSCRIPTION',
       subscriptionId: updated.id,
       recoveryCaseId: recoveryCase.id,
       instructions:
-        'A real subscription billing cycle was marked failed (the same state a real Razorpay subscription.pending webhook produces) and handed to Vidur\'s automatic pipeline.',
+        'A real subscription billing cycle was marked failed (the same state a real Razorpay subscription.pending webhook produces) and a recovery case opened. Open the case and click "Run full agent" to watch Vidur handle it live.',
     };
   }
 
@@ -220,7 +226,8 @@ export class RecoveryLabService {
    * authorization behind a lab-created mandate, so — exactly like the real
    * strategy table for this root cause — the pipeline escalates for human
    * attention rather than attempting a debit against a token that doesn't
-   * exist; it never fabricates a retry attempt.
+   * exist; it never fabricates a retry attempt. Left OPEN for the same
+   * reason as the other auto-orchestrated scenarios above.
    */
   async launchMandateFailure(merchantId: string, dto: LaunchScenarioDto) {
     const customer = await this.getOrCreateLabCustomer(merchantId, dto.customerName);
@@ -248,14 +255,13 @@ export class RecoveryLabService {
       mandate.id,
       'MANDATE_PAUSED',
     );
-    void this.autoOrchestrator.runAutomaticRecovery(recoveryCase.id);
 
     return {
       scenario: 'MANDATE_RETRY_SEQUENCER',
       mandateId: mandate.id,
       recoveryCaseId: recoveryCase.id,
       instructions:
-        'A real mandate was created in a paused state and handed to Vidur\'s automatic pipeline. Since a paused mandate has no valid token to charge, Vidur correctly escalates it for human follow-up rather than attempting a debit.',
+        'A real mandate was created in a paused state and a recovery case opened. Open the case and click "Run full agent" — since a paused mandate has no valid token to charge, watch Vidur correctly escalate it for human follow-up instead of fabricating a retry.',
     };
   }
 

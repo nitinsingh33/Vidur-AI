@@ -4,7 +4,6 @@ import { RiskService } from '../risk/risk.service';
 import { CheckoutSweepService } from '../checkout-sweep/checkout-sweep.service';
 import { InvoiceOverdueSweepService } from '../invoices/invoice-overdue-sweep.service';
 import { InvoicesService } from '../invoices/invoices.service';
-import { RecoveryAutoOrchestratorService } from '../recovery-auto/recovery-auto-orchestrator.service';
 import { PromiseToPayService } from '../promise-to-pay/promise-to-pay.service';
 import { RecoveryLabService } from './recovery-lab.service';
 
@@ -43,10 +42,6 @@ describe('RecoveryLabService', () => {
     create: jest.fn(),
   } as unknown as InvoicesService;
 
-  const autoOrchestrator = {
-    runAutomaticRecovery: jest.fn().mockResolvedValue(undefined),
-  } as unknown as RecoveryAutoOrchestratorService;
-
   const promiseToPayService = {
     create: jest.fn(),
   } as unknown as PromiseToPayService;
@@ -64,12 +59,11 @@ describe('RecoveryLabService', () => {
       checkoutSweepService,
       invoiceOverdueSweepService,
       invoicesService,
-      autoOrchestrator,
       promiseToPayService,
     );
   });
 
-  it('launchPaymentFailure creates a real FAILED payment and hands off to the automatic orchestrator, never an outcome directly', async () => {
+  it('launchPaymentFailure creates a real FAILED payment and opens a case, but leaves it OPEN for the judge/merchant to run themselves', async () => {
     (paymentsService.create as jest.Mock).mockResolvedValue({ id: 'payment-1' });
     (riskService.assessPayment as jest.Mock).mockResolvedValue({ id: 'case-1' });
 
@@ -80,9 +74,9 @@ describe('RecoveryLabService', () => {
       { isDemoData: false },
     );
     expect(riskService.assessPayment).toHaveBeenCalledWith('payment-1');
-    expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-1');
     expect(prisma.recoveryOutcome.create).not.toHaveBeenCalled();
     expect(result.recoveryCaseId).toBe('case-1');
+    expect(result.instructions).toContain('Run full agent');
   });
 
   it('launchPaymentFailure tags the payment isDemoData when the merchant is the dedicated demo tenant', async () => {
@@ -126,20 +120,20 @@ describe('RecoveryLabService', () => {
     expect(result.recoveryCaseId).toBe('case-2');
   });
 
-  it('launchSubscriptionFailure mirrors the real subscription.pending webhook state transition', async () => {
+  it('launchSubscriptionFailure mirrors the real subscription.pending webhook state transition, and leaves the case OPEN', async () => {
     (prisma.subscription.create as jest.Mock).mockResolvedValue({ id: 'sub-1' });
     (prisma.subscription.update as jest.Mock).mockResolvedValue({ id: 'sub-1' });
     (riskService.assessSubscriptionFailure as jest.Mock).mockResolvedValue({
       id: 'case-3',
     });
 
-    await service.launchSubscriptionFailure('merchant-1', {});
+    const result = await service.launchSubscriptionFailure('merchant-1', {});
 
     expect(prisma.subscription.update).toHaveBeenCalledWith({
       where: { id: 'sub-1' },
       data: { status: 'PAYMENT_FAILED', failedPaymentCount: { increment: 1 } },
     });
-    expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-3');
+    expect(result.instructions).toContain('Run full agent');
   });
 
   it('launchInvoiceOverdue creates a real overdue invoice and reuses the real sweep, not a direct case open', async () => {
@@ -161,7 +155,7 @@ describe('RecoveryLabService', () => {
     expect(result.recoveryCaseId).toBe('case-4');
   });
 
-  it('launchMandateFailure creates a real paused mandate and lets the real strategy table escalate it, never attempting a fabricated debit', async () => {
+  it('launchMandateFailure creates a real paused mandate and leaves the case OPEN for the real strategy table to escalate it when run', async () => {
     (prisma.mandate.create as jest.Mock).mockResolvedValue({ id: 'mandate-1' });
     (riskService.assessMandateFailure as jest.Mock).mockResolvedValue({
       id: 'case-5',
@@ -178,8 +172,8 @@ describe('RecoveryLabService', () => {
       'mandate-1',
       'MANDATE_PAUSED',
     );
-    expect(autoOrchestrator.runAutomaticRecovery).toHaveBeenCalledWith('case-5');
     expect(result.recoveryCaseId).toBe('case-5');
+    expect(result.instructions).toContain('Run full agent');
   });
 
   it('launchPromiseToPay creates a real overdue invoice and a real promise via PromiseToPayService, never a fabricated outcome', async () => {

@@ -28,7 +28,12 @@ import {
 import { Button } from '../ui/button'
 import { useAuth } from '../../context/AuthContext'
 import { formatAmount, formatLabel } from '../../lib/status'
-import { deriveAgentPipeline } from '../../lib/agentPipeline'
+import {
+  deriveAgentPipeline,
+  type FinalOutcome,
+  type GuardrailCheck,
+  type PipelineStage,
+} from '../../lib/agentPipeline'
 import { AgentExecutionTimeline } from './AgentExecutionTimeline'
 import { AgentGuardrails } from './AgentGuardrails'
 
@@ -48,6 +53,36 @@ type PanelState =
   | 'agent-running'
 
 const POLL_INTERVAL_MS = 1200
+
+/**
+ * The real pipeline (diagnose/decide/policy/execute/observe) is often fully
+ * resolved within a few hundred milliseconds — every stage below is real
+ * data, but showing it all at once reads as "already finished before I got
+ * here" rather than an agent actually working. Once the real result is in
+ * hand, stages are revealed one at a time at this pace instead of dumped
+ * together, purely so a human can watch each decision land.
+ */
+const STAGE_REVEAL_MS = 700
+
+interface RevealingPipeline {
+  stages: PipelineStage[]
+  finalOutcome: FinalOutcome | null
+  guardrails: GuardrailCheck[]
+  revealCount: number
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function clampStagesForReveal(
+  stages: PipelineStage[],
+  revealCount: number,
+): PipelineStage[] {
+  return stages.map((stage, index) =>
+    index < revealCount ? stage : { key: stage.key, label: stage.label, status: 'pending' },
+  )
+}
 
 export function VidurRecoveryPanel({
   recoveryCase,
@@ -74,7 +109,10 @@ export function VidurRecoveryPanel({
     useState<AgentRecoveryResult | null>(null)
 
   const [isAgentRunning, setIsAgentRunning] = useState(false)
+  const [revealingPipeline, setRevealingPipeline] =
+    useState<RevealingPipeline | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     if (!isAgentRunning) {
@@ -84,6 +122,7 @@ export function VidurRecoveryPanel({
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
@@ -182,12 +221,19 @@ export function VidurRecoveryPanel({
   async function handleRunAgent() {
     if (!token) return
 
+    const snapshotBeforeRun = caseSnapshot
+
     setError(null)
     setAgentResult(null)
-    setInitialSnapshot(caseSnapshot)
+    setInitialSnapshot(snapshotBeforeRun)
     setIsAgentRunning(true)
     setState('agent-running')
+    setRevealingPipeline(null)
 
+    // Real interim state — if the backend genuinely takes a few seconds
+    // (a reachable Gemini/ML call, say), this shows actual progress as it
+    // happens. If it resolves faster than one tick, the staged reveal below
+    // still makes sure the result doesn't just flash into view.
     pollRef.current = setInterval(() => {
       getRecoveryCase(token, recoveryCase.id)
         .then(setCaseSnapshot)
@@ -205,8 +251,35 @@ export function VidurRecoveryPanel({
         recoveryCase.id,
       )
 
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+
+      const { stages, finalOutcome, guardrails } = deriveAgentPipeline({
+        recoveryCase: finalSnapshot,
+        initialSnapshot: snapshotBeforeRun,
+        agentResult: result,
+        isRunning: false,
+      })
+
+      for (let count = 1; count <= stages.length; count += 1) {
+        if (!mountedRef.current) return
+        setRevealingPipeline({ stages, finalOutcome, guardrails, revealCount: count })
+        if (count < stages.length) {
+          await wait(STAGE_REVEAL_MS)
+        }
+      }
+
+      // Hold on the fully-revealed result for a beat before handing back to
+      // the normal render path, instead of it disappearing the instant the
+      // last stage lands.
+      await wait(STAGE_REVEAL_MS)
+      if (!mountedRef.current) return
+
       setCaseSnapshot(finalSnapshot)
       setAgentResult(result)
+      setRevealingPipeline(null)
       setState('idle')
 
       if (result.success === true) {
@@ -218,6 +291,7 @@ export function VidurRecoveryPanel({
           ? err.message
           : 'Agent recovery failed.',
       )
+      setRevealingPipeline(null)
       setState('idle')
     } finally {
       if (pollRef.current) {
@@ -225,7 +299,7 @@ export function VidurRecoveryPanel({
         pollRef.current = null
       }
 
-      setIsAgentRunning(false)
+      if (mountedRef.current) setIsAgentRunning(false)
     }
   }
 
@@ -265,18 +339,33 @@ export function VidurRecoveryPanel({
     agentResult !== null ||
     caseSnapshot.actions.length > 0
 
-  const { stages, finalOutcome, guardrails } = hasPipelineData
-    ? deriveAgentPipeline({
-        recoveryCase: caseSnapshot,
-        initialSnapshot,
-        agentResult,
-        isRunning: isAgentRunning,
-      })
-    : {
-        stages: [],
-        finalOutcome: null,
-        guardrails: [],
+  const { stages, finalOutcome, guardrails } = revealingPipeline
+    ? {
+        stages: clampStagesForReveal(
+          revealingPipeline.stages,
+          revealingPipeline.revealCount,
+        ),
+        finalOutcome:
+          revealingPipeline.revealCount === revealingPipeline.stages.length
+            ? revealingPipeline.finalOutcome
+            : null,
+        guardrails:
+          revealingPipeline.revealCount === revealingPipeline.stages.length
+            ? revealingPipeline.guardrails
+            : [],
       }
+    : hasPipelineData
+      ? deriveAgentPipeline({
+          recoveryCase: caseSnapshot,
+          initialSnapshot,
+          agentResult,
+          isRunning: isAgentRunning,
+        })
+      : {
+          stages: [],
+          finalOutcome: null,
+          guardrails: [],
+        }
 
   return (
     <section className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
