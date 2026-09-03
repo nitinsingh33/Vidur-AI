@@ -109,10 +109,11 @@ export class StorefrontService {
           externalId: dto.customer.email,
         },
       },
-      update: {
-        name: dto.customer.name,
-        phone: dto.customer.phone,
-      },
+      // Never overwrite an existing customer's identity — a later checkout
+      // with a different typed name for the same email must not rewrite
+      // history for every past order/recovery case that already points at
+      // this customer. Only a brand-new email creates a new record.
+      update: {},
       create: {
         merchantId: merchant.id,
         externalId: dto.customer.email,
@@ -154,10 +155,8 @@ export class StorefrontService {
           externalId: dto.customer.email,
         },
       },
-      update: {
-        name: dto.customer.name,
-        phone: dto.customer.phone,
-      },
+      // Same "never overwrite an existing customer" rule as createOrder.
+      update: {},
       create: {
         merchantId: merchant.id,
         externalId: dto.customer.email,

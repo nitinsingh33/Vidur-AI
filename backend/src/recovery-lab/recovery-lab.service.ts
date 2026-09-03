@@ -65,7 +65,10 @@ export class RecoveryLabService {
 
     return this.prisma.customer.upsert({
       where: { merchantId_externalId: { merchantId, externalId } },
-      update: customerName ? { name: customerName } : {},
+      // Never overwrite the existing lab customer's name — every scenario
+      // shares this one externalId, so renaming it here would retroactively
+      // relabel every past Recovery Lab case for this merchant.
+      update: {},
       create: {
         merchantId,
         externalId,
