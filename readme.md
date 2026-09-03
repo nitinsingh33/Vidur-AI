@@ -2,7 +2,7 @@
 
 > An AI-powered revenue recovery agent that detects revenue at risk, diagnoses the root cause, selects the right intervention, executes a bounded recovery workflow, and only ever calls money "recovered" once a real Razorpay webhook confirms it.
 
-**Live demo:** [www.vidurai.co.in](https://www.vidurai.co.in) · **API:** `vidurai-backend.onrender.com`
+**Live demo:** [www.vidurai.co.in](https://www.vidurai.co.in) · **API:** [vidurai-backend.onrender.com](https://vidurai-backend.onrender.com/)
 **Full technical architecture:** see [`architecture.md`](./architecture.md)
 
 ---

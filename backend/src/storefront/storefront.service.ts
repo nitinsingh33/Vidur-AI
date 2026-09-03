@@ -34,7 +34,13 @@ export class StorefrontService {
   private async findMerchantBySlug(slug: string) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { slug },
-      select: { id: true, name: true, currency: true, slug: true },
+      select: {
+        id: true,
+        name: true,
+        currency: true,
+        slug: true,
+        isDemoMerchant: true,
+      },
     });
 
     if (!merchant) {
@@ -113,7 +119,16 @@ export class StorefrontService {
       // with a different typed name for the same email must not rewrite
       // history for every past order/recovery case that already points at
       // this customer. Only a brand-new email creates a new record.
-      update: {},
+      //
+      // Exception: a demo merchant's storefront (e.g. FashionKart) is
+      // reused by many different testers typing many different names
+      // against the same handful of throwaway emails — there is no real
+      // customer history to protect there, so each checkout's typed name/
+      // phone is allowed to overwrite what's on file instead of silently
+      // sticking to whichever tester typed first.
+      update: merchant.isDemoMerchant
+        ? { name: dto.customer.name, phone: dto.customer.phone }
+        : {},
       create: {
         merchantId: merchant.id,
         externalId: dto.customer.email,
@@ -155,8 +170,11 @@ export class StorefrontService {
           externalId: dto.customer.email,
         },
       },
-      // Same "never overwrite an existing customer" rule as createOrder.
-      update: {},
+      // Same "never overwrite an existing customer" rule as createOrder,
+      // with the same demo-merchant exception — see createOrder's comment.
+      update: merchant.isDemoMerchant
+        ? { name: dto.customer.name, phone: dto.customer.phone }
+        : {},
       create: {
         merchantId: merchant.id,
         externalId: dto.customer.email,
